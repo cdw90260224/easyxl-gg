@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import UploadZone from './components/UploadZone';
 import SearchBar from './components/SearchBar';
@@ -19,6 +19,7 @@ export default function App() {
     const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [showUpload, setShowUpload] = useState(true);
+    const resultsRef = useRef<HTMLDivElement>(null);
 
     // Theme state
     const [isDark, setIsDark] = useState(true);
@@ -61,6 +62,10 @@ export default function App() {
             toast.error('AI 분석 중 오류가 발생했습니다.');
         } finally {
             setIsLoading(false);
+            // Smooth scroll to results after analysis is done
+            setTimeout(() => {
+                resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
         }
     };
 
@@ -164,7 +169,7 @@ export default function App() {
                 </div>
 
                 {/* Results Section */}
-                <div className="w-full max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
+                <div ref={resultsRef} className="w-full max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
                     {isLoading && (
                         <div className="flex flex-col items-center justify-center p-12 space-y-4">
                             <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />

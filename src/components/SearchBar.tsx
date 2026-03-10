@@ -18,7 +18,12 @@ export default function SearchBar({ value, onChange, onSearch }: SearchBarProps)
                     type="text"
                     value={value}
                     onChange={(e) => onChange(e.target.value)}
-                    onKeyDown={(e) => e.key === 'Enter' && onSearch(value)}
+                    onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                            e.preventDefault();
+                            onSearch(value);
+                        }
+                    }}
                     placeholder="자연어로 질문해보세요. (예: '김철수 담당자의 1월 매출 데이터 보여줘')"
                     className="w-full bg-transparent text-gray-900 dark:text-gray-100 text-lg placeholder-gray-400 dark:placeholder-gray-500 outline-none font-medium"
                 />

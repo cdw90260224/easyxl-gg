@@ -27,11 +27,15 @@ export default function UploadZone({ onDataLoaded }: { onDataLoaded: (data: any[
                 const workbook = XLSX.read(data, { type: 'array' });
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
-                const jsonData = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+
+                // Parse with header: 1 to get a 2D array and handle keys manually if needed,
+                // or use the default but ensure we know what the headers are.
+                const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
+                const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
 
                 if (jsonData.length > 0) {
                     onDataLoaded(jsonData);
-                    toast.success('파일이 성공적으로 로드되었습니다.');
+                    toast.success(`파일 로드 완료: 총 ${jsonData.length.toLocaleString()}개의 행과 ${headers.length}개의 카테고리(열)를 인식했습니다.`);
                 } else {
                     toast.error("엑셀 파일이 비어있거나 읽을 수 없습니다.");
                 }
