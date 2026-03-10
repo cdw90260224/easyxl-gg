@@ -13,7 +13,7 @@ import { processNaturalLanguageQuery, type AIAnalysisResult } from './services/a
 export default function App() {
     const [data, setData] = useState<any[]>([]);
     const [filteredData, setFilteredData] = useState<any[]>([]);
-    const [isPrivacyMode, setIsPrivacyMode] = useState(true);
+    const [isPrivacyMode] = useState(true);
     const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(null);
