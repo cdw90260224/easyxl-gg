@@ -13,6 +13,9 @@ export interface AIAnalysisResult {
     fuzzyColumnMatch?: Record<string, string>;
     operation?: 'sum' | 'count' | 'average' | 'max' | 'min' | 'none'; // Added
     targetColumn?: string; // Added
+    filterColumn?: string; // Added
+    filterValue?: string; // Added
+    filterOperator?: 'equals' | 'contains' | 'greater' | 'less'; // Added
 }
 
 export const processNaturalLanguageQuery = async (
@@ -43,14 +46,17 @@ export const processNaturalLanguageQuery = async (
   "calculatedValue": "추론된 결과값 (참고용)",
   "unit": "단위 (원, 명, 개 등)",
   "operation": "sum" | "count" | "average" | "max" | "min" | "none",
-  "targetColumn": "매핑된 실제 열 이름",
-  "generatedData": [{"열이름": "값"}], // 생성 인텐트일 때만
-  "fuzzyColumnMatch": {"사용자단어": "실제열이름"} // 열 이름이 불일치할 때 매핑
+  "targetColumn": "계산용 매핑된 열 이름",
+  "filterColumn": "필터용 매핑된 열 이름",
+  "filterValue": "필터링할 값",
+  "filterOperator": "equals" | "contains" | "greater" | "less",
+  "generatedData": [{"열이름": "값"}],
+  "fuzzyColumnMatch": {"사용자단어": "실제열이름"}
 }
 
 **주의사항**:
-- '매출', '금액', '가격' 등 유사한 의미를 가진 열은 자동으로 매핑하여 "targetColumn"에 실제 열 이름을 넣으세요.
-- 만약 열을 도저히 찾을 수 없다면 "operation"을 "none"으로 하고 explanation에 친절한 오류 메시지를 적으세요.
+- 필터링 요청 시: 사용자가 "이름이 차도운인 사람"이라고 하면 filterColumn: "이름", filterValue: "차도운", filterOperator: "contains" (또는 equals)로 설정하세요.
+- 불필요한 조사("인", "해줘", "필터링")는 무시하고 핵심 데이터 조건만 추출하세요.
 - 계산/필터링 요청 시, 제공된 데이터 컬럼 정보를 참고하세요.
 - 생성 요청 시, 자연스러운 샘플 데이터 5개 이상을 생성하여 "generatedData"에 담아주세요.`;
 

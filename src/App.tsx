@@ -90,230 +90,257 @@ export default function App() {
             } else if (result.intent === 'calculation' && result.operation === 'none') {
                 setAnalysis(result);
                 toast.warning(result.explanation || '열을 찾을 수 없습니다.');
-            } else {
+            } else if (result.intent === 'filtering') {
                 setAnalysis(result);
-                const keywords = query.toLowerCase().split(/and|&|,|\s+/).filter(k => k.length > 0);
-                setFilteredData(data.filter(row => {
-                    const rowString = Object.values(row).map(String).join(' ').toLowerCase();
-                    return keywords.every(kw => rowString.includes(kw));
-                }));
-                toast.success('데이터를 필터링했습니다.');
-            }
-        } catch (err) {
-            console.error(err);
-            toast.error('AI 분석 중 오류가 발생했습니다.');
-        } finally {
-            setIsLoading(false);
-        }
-    };
+                const { filterColumn, filterValue, filterOperator } = result;
 
-    const handleExport = () => {
-        try {
-            if (filteredData.length === 0) {
-                toast.warning('내보낼 데이터가 없습니다.');
-                return;
-            }
+                if (filterColumn && filterValue && columns.includes(filterColumn)) {
+                    const filtered = data.filter(row => {
+                        const cellValue = String(row[filterColumn]).toLowerCase();
+                        const targetValue = String(filterValue).toLowerCase();
 
-            const exportData = filteredData.map(row => {
-                const newRow: any = { ...row };
-                if (isPrivacyMode) {
-                    Object.keys(newRow).forEach(key => {
-                        const lowerCol = key.toLowerCase();
-                        if (lowerCol.includes('이름') || lowerCol.includes('name') || lowerCol.includes('담당자')) {
-                            newRow[key] = '[NAME_HIDDEN]';
-                        } else if (lowerCol.includes('연락처') || lowerCol.includes('phone') || lowerCol.includes('tel') || lowerCol.includes('전화')) {
-                            newRow[key] = '[PHONE_HIDDEN]';
-                        } else if (lowerCol.includes('email') || lowerCol.includes('이메일') || lowerCol.includes('메일')) {
-                            newRow[key] = '[EMAIL_HIDDEN]';
-                        } else if (lowerCol.includes('주소') || lowerCol.includes('address')) {
-                            newRow[key] = '[ADDRESS_HIDDEN]';
+                        switch (filterOperator) {
+                            case 'equals': return cellValue === targetValue;
+                            case 'contains': return cellValue.includes(targetValue);
+                            case 'greater': return parseFloat(cellValue) > parseFloat(targetValue);
+                            case 'less': return parseFloat(cellValue) < parseFloat(targetValue);
+                            default: return cellValue.includes(targetValue);
                         }
                     });
+
+                    setFilteredData(filtered);
+                    if (filtered.length === 0) {
+                        toast.info(`'${filterValue}'에 해당하는 데이터를 찾을 수 없습니다.`);
+                    } else {
+                        toast.success(`${filtered.length}개의 행이 필터링되었습니다.`);
+                    }
+                } else {
+                    // Fallback to simpler contains search if column matching failed but we have a value
+                    const keyword = filterValue || query.split(' ').find(w => w.length > 1) || query;
+                    const filtered = data.filter(row => {
+                        return Object.values(row).some(val =>
+                            String(val).toLowerCase().includes(String(keyword).toLowerCase())
+                        );
+                    });
+                    setFilteredData(filtered);
+                    toast.success('유사한 키워드로 데이터를 필터링했습니다.');
                 }
-                return newRow;
-            });
+            } else {
+            } catch (err) {
+                console.error(err);
+                toast.error('AI 분석 중 오류가 발생했습니다.');
+            } finally {
+                setIsLoading(false);
+            }
+        };
 
-            const worksheet = XLSX.utils.json_to_sheet(exportData);
-            const workbook = XLSX.utils.book_new();
-            XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
-            XLSX.writeFile(workbook, "easyxl_export.xlsx");
-            toast.success('데이터가 성공적으로 엑셀로 내보내졌습니다!');
-        } catch (err) {
-            toast.error('내보내기 중 오류가 발생했습니다.');
-        }
-    };
+        const handleExport = () => {
+            try {
+                if (filteredData.length === 0) {
+                    toast.warning('내보낼 데이터가 없습니다.');
+                    return;
+                }
 
-    const suggestedQueries = [
-        "이름이 '차도운'인 행 필터링",
-        "매출 합계 계산",
-        "중복 데이터 제거"
-    ];
+                const exportData = filteredData.map(row => {
+                    const newRow: any = { ...row };
+                    if (isPrivacyMode) {
+                        Object.keys(newRow).forEach(key => {
+                            const lowerCol = key.toLowerCase();
+                            if (lowerCol.includes('이름') || lowerCol.includes('name') || lowerCol.includes('담당자')) {
+                                newRow[key] = '[NAME_HIDDEN]';
+                            } else if (lowerCol.includes('연락처') || lowerCol.includes('phone') || lowerCol.includes('tel') || lowerCol.includes('전화')) {
+                                newRow[key] = '[PHONE_HIDDEN]';
+                            } else if (lowerCol.includes('email') || lowerCol.includes('이메일') || lowerCol.includes('메일')) {
+                                newRow[key] = '[EMAIL_HIDDEN]';
+                            } else if (lowerCol.includes('주소') || lowerCol.includes('address')) {
+                                newRow[key] = '[ADDRESS_HIDDEN]';
+                            }
+                        });
+                    }
+                    return newRow;
+                });
 
-    return (
-        <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0f0f12] transition-colors duration-500">
-            <Toaster position="bottom-right" richColors theme={isDark ? 'dark' : 'light'} />
-            <PrivacyModal isOpen={isPrivacyModalOpen} onClose={() => setIsPrivacyModalOpen(false)} />
+                const worksheet = XLSX.utils.json_to_sheet(exportData);
+                const workbook = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(workbook, worksheet, "Sheet1");
+                XLSX.writeFile(workbook, "easyxl_export.xlsx");
+                toast.success('데이터가 성공적으로 엑셀로 내보내졌습니다!');
+            } catch (err) {
+                toast.error('내보내기 중 오류가 발생했습니다.');
+            }
+        };
 
-            <Header
-                isDark={isDark}
-                toggleDark={() => setIsDark(!isDark)}
-                isPrivacyMode={isPrivacyMode}
-                onShowPrivacyPolicy={() => setIsPrivacyModalOpen(true)}
-            />
+        const suggestedQueries = [
+            "이름이 '차도운'인 행 필터링",
+            "매출 합계 계산",
+            "중복 데이터 제거"
+        ];
 
-            <main className="flex-1 flex flex-col items-center pt-12 px-4 space-y-12">
-                {/* Welcome & Command Center Section */}
-                <div className="w-full max-w-4xl space-y-8 text-center">
-                    <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-700">
-                        <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white transition-all">
-                            당신의 엑셀, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600">일상언어로 완벽하게 제어하세요</span>
-                        </h2>
-                        <p className="text-base text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-                            파일을 업로드하고 원하는 작업을 자연어로 입력만 하세요.
-                        </p>
-                    </div>
+        return (
+            <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0f0f12] transition-colors duration-500">
+                <Toaster position="bottom-right" richColors theme={isDark ? 'dark' : 'light'} />
+                <PrivacyModal isOpen={isPrivacyModalOpen} onClose={() => setIsPrivacyModalOpen(false)} />
 
-                    <div className="space-y-6 animate-in fade-in zoom-in-95 duration-1000 delay-200">
-                        <SearchBar
-                            value={searchQuery}
-                            onChange={setSearchQuery}
-                            onSearch={(q) => {
-                                if (data.length === 0 && track !== 'create') {
-                                    toast.error('먼저 엑셀 파일을 업로드하거나 생성 모드를 선택해주세요.');
-                                    return;
-                                }
-                                handleSearch(q);
-                            }}
-                        />
+                <Header
+                    isDark={isDark}
+                    toggleDark={() => setIsDark(!isDark)}
+                    isPrivacyMode={isPrivacyMode}
+                    onShowPrivacyPolicy={() => setIsPrivacyModalOpen(true)}
+                />
 
-                        {/* Suggested Queries Taglets */}
-                        <div className="flex flex-wrap items-center justify-center gap-2">
-                            <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-2 uppercase tracking-wider">Suggested:</span>
-                            {suggestedQueries.map((q, idx) => (
+                <main className="flex-1 flex flex-col items-center pt-12 px-4 space-y-12">
+                    {/* Welcome & Command Center Section */}
+                    <div className="w-full max-w-4xl space-y-8 text-center">
+                        <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-700">
+                            <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white transition-all">
+                                당신의 엑셀, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600">일상언어로 완벽하게 제어하세요</span>
+                            </h2>
+                            <p className="text-base text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
+                                파일을 업로드하고 원하는 작업을 자연어로 입력만 하세요.
+                            </p>
+                        </div>
+
+                        <div className="space-y-6 animate-in fade-in zoom-in-95 duration-1000 delay-200">
+                            <SearchBar
+                                value={searchQuery}
+                                onChange={setSearchQuery}
+                                onSearch={(q) => {
+                                    if (data.length === 0 && track !== 'create') {
+                                        toast.error('먼저 엑셀 파일을 업로드하거나 생성 모드를 선택해주세요.');
+                                        return;
+                                    }
+                                    handleSearch(q);
+                                }}
+                            />
+
+                            {/* Suggested Queries Taglets */}
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-2 uppercase tracking-wider">Suggested:</span>
+                                {suggestedQueries.map((q, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => {
+                                            setSearchQuery(q);
+                                            if (data.length > 0 || track === 'create') handleSearch(q);
+                                            else toast.error('먼저 트랙을 선택해주세요.');
+                                        }}
+                                        className="px-4 py-1.5 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:border-indigo-500 dark:hover:border-indigo-500 hover:text-indigo-500 transition-all shadow-sm"
+                                    >
+                                        {q}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {track === 'home' && data.length === 0 && (
+                            <div className="grid md:grid-cols-2 gap-6 pt-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
                                 <button
-                                    key={idx}
-                                    onClick={() => {
-                                        setSearchQuery(q);
-                                        if (data.length > 0 || track === 'create') handleSearch(q);
-                                        else toast.error('먼저 트랙을 선택해주세요.');
-                                    }}
-                                    className="px-4 py-1.5 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:border-indigo-500 dark:hover:border-indigo-500 hover:text-indigo-500 transition-all shadow-sm"
+                                    onClick={() => setTrack('modify')}
+                                    className="group p-8 bg-white dark:bg-[#1a1a1a] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-3xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all text-left space-y-4"
                                 >
-                                    {q}
-                                </button>
-                            ))}
-                        </div>
-                    </div>
-
-                    {track === 'home' && data.length === 0 && (
-                        <div className="grid md:grid-cols-2 gap-6 pt-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
-                            <button
-                                onClick={() => setTrack('modify')}
-                                className="group p-8 bg-white dark:bg-[#1a1a1a] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-3xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all text-left space-y-4"
-                            >
-                                <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                                    <FileEdit className="w-8 h-8" />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">기존 파일 업로드</h3>
-                                    <p className="text-gray-500 dark:text-gray-400">엑셀 파일을 올려서 분석하고 수정해보세요.</p>
-                                </div>
-                            </button>
-                            <button
-                                onClick={() => { setTrack('create'); setData([]); setFilteredData([]); }}
-                                className="group p-8 bg-white dark:bg-[#1a1a1a] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-3xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all text-left space-y-4"
-                            >
-                                <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
-                                    <FilePlus className="w-8 h-8" />
-                                </div>
-                                <div>
-                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">새 시트 생성</h3>
-                                    <p className="text-gray-500 dark:text-gray-400">빈 시트에서 자연어로 데이터를 만들어보세요.</p>
-                                </div>
-                            </button>
-                        </div>
-                    )}
-
-                    <div className={`transition-all duration-700 overflow-hidden ${track === 'modify' && data.length === 0 ? 'max-h-[500px] opacity-100 mt-8' : 'max-h-0 opacity-0 pointer-events-none'}`}>
-                        <UploadZone onDataLoaded={(d) => { setData(d); setFilteredData(d); toast.success('파일이 성공적으로 로드되었습니다. 이제 검색해보세요!'); }} />
-                    </div>
-                </div>
-
-                {/* Results Section */}
-                <div ref={resultsRef} className="w-full max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
-                    {isLoading ? (
-                        <div className="flex flex-col items-center justify-center p-24 space-y-6 bg-white dark:bg-[#1a1a1a] rounded-3xl border border-gray-100 dark:border-gray-800 shadow-xl">
-                            <div className="relative">
-                                <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
-                                <div className="absolute inset-0 flex items-center justify-center">
-                                    <div className="w-2 h-2 bg-indigo-500 rounded-full animate-ping" />
-                                </div>
-                            </div>
-                            <div className="space-y-2 text-center">
-                                <p className="text-xl font-bold text-gray-900 dark:text-white">AI가 데이터를 분석 중입니다...</p>
-                                <p className="text-gray-500 dark:text-gray-400 animate-pulse font-medium">거의 완료되었습니다. 잠시만 기다려주세요.</p>
-                            </div>
-                        </div>
-                    ) : (
-                        <>
-                            {analysis && analysis.intent === 'calculation' && analysis.calculatedValue !== undefined && (
-                                <ResultCard
-                                    value={analysis.calculatedValue}
-                                    unit={analysis.unit}
-                                    explanation={analysis.explanation}
-                                />
-                            )}
-
-                            {analysis && analysis.intent === 'filtering' && (
-                                <div className="animate-in fade-in zoom-in-95 duration-500">
-                                    <AnalysisCard analysis={analysis} />
-                                </div>
-                            )}
-
-                            {data.length > 0 && <AnalyticsDashboard data={filteredData} />}
-                        </>
-                    )}
-
-                    <div className="relative group shadow-2xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1a1a1a] transition-all duration-500">
-                        <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
-                            <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                <span className={`w-2 h-2 rounded-full ${data.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-700'}`} />
-                                {data.length > 0 ? 'Processed Data Grid' : 'Data Preview'}
-                            </h3>
-                            {data.length > 0 && (
-                                <div className="flex items-center gap-2">
-                                    <button
-                                        onClick={() => toast.info('Google Sheets 연동은 현재 준비 중인 기능입니다.')}
-                                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-[1.02] active:scale-95"
-                                    >
-                                        <Share2 className="w-4 h-4" />
-                                        Google Sheets
-                                    </button>
-                                    <button
-                                        onClick={handleExport}
-                                        className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-green-600/30 hover:shadow-green-600/50 hover:scale-[1.02] active:scale-95"
-                                    >
-                                        <Download className="w-4 h-4" />
-                                        Excel Download
-                                    </button>
-                                </div>
-                            )}
-                        </div>
-                        <div className="max-h-[600px] overflow-auto">
-                            {data.length > 0 ? (
-                                <DataGrid data={filteredData} isPrivacyMode={isPrivacyMode} />
-                            ) : (
-                                <div className="p-20 text-center flex flex-col items-center gap-4">
-                                    <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-full">
-                                        <svg className="w-12 h-12 text-gray-300 dark:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                    <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                                        <FileEdit className="w-8 h-8" />
                                     </div>
-                                    <p className="text-gray-400 dark:text-gray-600 font-medium">데이터를 업로드하면 여기에 표시됩니다</p>
-                                </div>
-                            )}
+                                    <div>
+                                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">기존 파일 업로드</h3>
+                                        <p className="text-gray-500 dark:text-gray-400">엑셀 파일을 올려서 분석하고 수정해보세요.</p>
+                                    </div>
+                                </button>
+                                <button
+                                    onClick={() => { setTrack('create'); setData([]); setFilteredData([]); }}
+                                    className="group p-8 bg-white dark:bg-[#1a1a1a] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-3xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all text-left space-y-4"
+                                >
+                                    <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                                        <FilePlus className="w-8 h-8" />
+                                    </div>
+                                    <div>
+                                        <h3 className="text-xl font-bold text-gray-900 dark:text-white">새 시트 생성</h3>
+                                        <p className="text-gray-500 dark:text-gray-400">빈 시트에서 자연어로 데이터를 만들어보세요.</p>
+                                    </div>
+                                </button>
+                            </div>
+                        )}
+
+                        <div className={`transition-all duration-700 overflow-hidden ${track === 'modify' && data.length === 0 ? 'max-h-[500px] opacity-100 mt-8' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+                            <UploadZone onDataLoaded={(d) => { setData(d); setFilteredData(d); toast.success('파일이 성공적으로 로드되었습니다. 이제 검색해보세요!'); }} />
                         </div>
                     </div>
-                </div>
-            </main>
-        </div>
-    );
-}
+
+                    {/* Results Section */}
+                    <div ref={resultsRef} className="w-full max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
+                        {isLoading ? (
+                            <div className="flex flex-col items-center justify-center p-24 space-y-6 bg-white dark:bg-[#1a1a1a] rounded-3xl border border-gray-100 dark:border-gray-800 shadow-xl">
+                                <div className="relative">
+                                    <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+                                    <div className="absolute inset-0 flex items-center justify-center">
+                                        <div className="w-2 h-2 bg-indigo-500 rounded-full animate-ping" />
+                                    </div>
+                                </div>
+                                <div className="space-y-2 text-center">
+                                    <p className="text-xl font-bold text-gray-900 dark:text-white">AI가 데이터를 분석 중입니다...</p>
+                                    <p className="text-gray-500 dark:text-gray-400 animate-pulse font-medium">거의 완료되었습니다. 잠시만 기다려주세요.</p>
+                                </div>
+                            </div>
+                        ) : (
+                            <>
+                                {analysis && analysis.intent === 'calculation' && analysis.calculatedValue !== undefined && (
+                                    <ResultCard
+                                        value={analysis.calculatedValue}
+                                        unit={analysis.unit}
+                                        explanation={analysis.explanation}
+                                    />
+                                )}
+
+                                {analysis && analysis.intent === 'filtering' && (
+                                    <div className="animate-in fade-in zoom-in-95 duration-500">
+                                        <AnalysisCard analysis={analysis} />
+                                    </div>
+                                )}
+
+                                {data.length > 0 && <AnalyticsDashboard data={filteredData} />}
+                            </>
+                        )}
+
+                        <div className="relative group shadow-2xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1a1a1a] transition-all duration-500">
+                            <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+                                <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                    <span className={`w-2 h-2 rounded-full ${data.length > 0 ? 'bg-green-500 animate-pulse' : 'bg-gray-300 dark:bg-gray-700'}`} />
+                                    {data.length > 0 ? 'Processed Data Grid' : 'Data Preview'}
+                                </h3>
+                                {data.length > 0 && (
+                                    <div className="flex items-center gap-2">
+                                        <button
+                                            onClick={() => toast.info('Google Sheets 연동은 현재 준비 중인 기능입니다.')}
+                                            className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-[1.02] active:scale-95"
+                                        >
+                                            <Share2 className="w-4 h-4" />
+                                            Google Sheets
+                                        </button>
+                                        <button
+                                            onClick={handleExport}
+                                            className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-green-600/30 hover:shadow-green-600/50 hover:scale-[1.02] active:scale-95"
+                                        >
+                                            <Download className="w-4 h-4" />
+                                            Excel Download
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                            <div className="max-h-[600px] overflow-auto">
+                                {data.length > 0 ? (
+                                    <DataGrid data={filteredData} isPrivacyMode={isPrivacyMode} />
+                                ) : (
+                                    <div className="p-20 text-center flex flex-col items-center gap-4">
+                                        <div className="p-4 bg-gray-50 dark:bg-gray-900/50 rounded-full">
+                                            <svg className="w-12 h-12 text-gray-300 dark:text-gray-700" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V8a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
+                                        </div>
+                                        <p className="text-gray-400 dark:text-gray-600 font-medium">데이터를 업로드하면 여기에 표시됩니다</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                </main>
+            </div>
+        );
+    }
