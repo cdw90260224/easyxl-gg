@@ -46,6 +46,9 @@ export default function App() {
         }
 
         setIsLoading(true);
+        // Immediate scroll to results area
+        resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
         try {
             const columns = data.length > 0 ? Object.keys(data[0]) : [];
             const result = await processNaturalLanguageQuery(query, columns, data);
@@ -59,13 +62,10 @@ export default function App() {
 
             toast.success('AI가 데이터를 분석했습니다.');
         } catch (err) {
+            console.error(err);
             toast.error('AI 분석 중 오류가 발생했습니다.');
         } finally {
             setIsLoading(false);
-            // Smooth scroll to results after analysis is done
-            setTimeout(() => {
-                resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }, 100);
         }
     };
 
@@ -170,20 +170,30 @@ export default function App() {
 
                 {/* Results Section */}
                 <div ref={resultsRef} className="w-full max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
-                    {isLoading && (
-                        <div className="flex flex-col items-center justify-center p-12 space-y-4">
-                            <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                            <p className="text-gray-500 font-medium animate-pulse">AI가 데이터를 분석하는 중입니다...</p>
+                    {isLoading ? (
+                        <div className="flex flex-col items-center justify-center p-24 space-y-6 bg-white dark:bg-[#1a1a1a] rounded-3xl border border-gray-100 dark:border-gray-800 shadow-xl">
+                            <div className="relative">
+                                <div className="w-16 h-16 border-4 border-indigo-500/20 border-t-indigo-500 rounded-full animate-spin" />
+                                <div className="absolute inset-0 flex items-center justify-center">
+                                    <div className="w-2 h-2 bg-indigo-500 rounded-full animate-ping" />
+                                </div>
+                            </div>
+                            <div className="space-y-2 text-center">
+                                <p className="text-xl font-bold text-gray-900 dark:text-white">AI가 데이터를 분석 중입니다...</p>
+                                <p className="text-gray-500 dark:text-gray-400 animate-pulse font-medium">거의 완료되었습니다. 잠시만 기다려주세요.</p>
+                            </div>
                         </div>
-                    )}
+                    ) : (
+                        <>
+                            {analysis && (
+                                <div className="animate-in fade-in zoom-in-95 duration-500">
+                                    <AnalysisCard analysis={analysis} />
+                                </div>
+                            )}
 
-                    {!isLoading && analysis && (
-                        <div className="animate-in fade-in zoom-in-95 duration-500">
-                            <AnalysisCard analysis={analysis} />
-                        </div>
+                            {data.length > 0 && <AnalyticsDashboard data={filteredData} />}
+                        </>
                     )}
-
-                    {data.length > 0 && <AnalyticsDashboard data={filteredData} />}
 
                     <div className="relative group shadow-2xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1a1a1a] transition-all duration-500">
                         <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">

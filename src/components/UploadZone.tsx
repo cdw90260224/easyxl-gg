@@ -28,14 +28,36 @@ export default function UploadZone({ onDataLoaded }: { onDataLoaded: (data: any[
                 const firstSheetName = workbook.SheetNames[0];
                 const worksheet = workbook.Sheets[firstSheetName];
 
-                // Parse with header: 1 to get a 2D array and handle keys manually if needed,
-                // or use the default but ensure we know what the headers are.
-                const jsonData: any[] = XLSX.utils.sheet_to_json(worksheet, { defval: "" });
-                const headers = jsonData.length > 0 ? Object.keys(jsonData[0]) : [];
+                // Get raw 2D array to identify title vs header
+                const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
+
+                // Find the first row that looks like a header (multiple columns filled)
+                let headerRowIndex = 0;
+                for (let i = 0; i < rawRows.length; i++) {
+                    const filledCols = rawRows[i].filter(cell => String(cell).trim() !== "").length;
+                    if (filledCols >= 2) { // Heuristic: headers usually have at least 2 non-empty columns
+                        headerRowIndex = i;
+                        break;
+                    }
+                }
+
+                const headers = rawRows[headerRowIndex].map(h => String(h).trim());
+                const dataRows = rawRows.slice(headerRowIndex + 1);
+
+                // Convert back to objects using found headers
+                const jsonData = dataRows
+                    .filter(row => row.some(cell => String(cell).trim() !== "")) // Skip empty rows
+                    .map(row => {
+                        const obj: any = {};
+                        headers.forEach((h, idx) => {
+                            if (h) obj[h] = row[idx] === undefined ? "" : row[idx];
+                        });
+                        return obj;
+                    });
 
                 if (jsonData.length > 0) {
                     onDataLoaded(jsonData);
-                    toast.success(`파일 로드 완료: 총 ${jsonData.length.toLocaleString()}개의 행과 ${headers.length}개의 카테고리(열)를 인식했습니다.`);
+                    toast.success(`파일 로드 완료: 총 ${jsonData.length.toLocaleString()}개의 행과 ${headers.filter(h => h).length}개의 카테고리(열)를 인식했습니다.`);
                 } else {
                     toast.error("엑셀 파일이 비어있거나 읽을 수 없습니다.");
                 }
