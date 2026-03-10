@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import Header from './components/Header';
 import UploadZone from './components/UploadZone';
 import SearchBar from './components/SearchBar';
+import ResultCard from './components/ResultCard'; // Added
 import AnalysisCard from './components/AnalysisCard';
 import DataGrid from './components/DataGrid';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
@@ -9,6 +10,7 @@ import PrivacyModal from './components/PrivacyModal';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { processNaturalLanguageQuery, type AIAnalysisResult } from './services/aiService';
+import { FileEdit, FilePlus, Share2, Download } from 'lucide-react'; // Added icons
 
 export default function App() {
     const [data, setData] = useState<any[]>([]);
@@ -19,6 +21,7 @@ export default function App() {
     const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(null);
     const [isLoading, setIsLoading] = useState(false);
     const [showUpload, setShowUpload] = useState(true);
+    const [track, setTrack] = useState<'home' | 'modify' | 'create'>('home'); // Added
     const resultsRef = useRef<HTMLDivElement>(null);
 
     // Theme state
@@ -31,12 +34,12 @@ export default function App() {
 
     useEffect(() => {
         if (data.length > 0) {
-            const timer = setTimeout(() => setShowUpload(false), 500); // Wait for feedback before shrinking
+            const timer = setTimeout(() => setShowUpload(false), 500);
             return () => clearTimeout(timer);
-        } else {
+        } else if (track === 'home') {
             setShowUpload(true);
         }
-    }, [data]);
+    }, [data, track]);
 
     const handleSearch = async (query: string) => {
         if (!query) {
@@ -52,15 +55,24 @@ export default function App() {
         try {
             const columns = data.length > 0 ? Object.keys(data[0]) : [];
             const result = await processNaturalLanguageQuery(query, columns, data);
-            setAnalysis(result);
 
-            const keywords = query.toLowerCase().split(/and|&|,|\s+/).filter(k => k.length > 0);
-            setFilteredData(data.filter(row => {
-                const rowString = Object.values(row).map(String).join(' ').toLowerCase();
-                return keywords.every(kw => rowString.includes(kw));
-            }));
-
-            toast.success('AI가 데이터를 분석했습니다.');
+            if (result.intent === 'generation' && result.generatedData) {
+                setData(result.generatedData);
+                setFilteredData(result.generatedData);
+                setAnalysis(null);
+                toast.success('데이터가 성공적으로 생성되었습니다.');
+            } else if (result.intent === 'calculation') {
+                setAnalysis(result);
+                toast.success('계산 결과가 도출되었습니다.');
+            } else {
+                setAnalysis(result);
+                const keywords = query.toLowerCase().split(/and|&|,|\s+/).filter(k => k.length > 0);
+                setFilteredData(data.filter(row => {
+                    const rowString = Object.values(row).map(String).join(' ').toLowerCase();
+                    return keywords.every(kw => rowString.includes(kw));
+                }));
+                toast.success('데이터를 필터링했습니다.');
+            }
         } catch (err) {
             console.error(err);
             toast.error('AI 분석 중 오류가 발생했습니다.');
@@ -140,8 +152,8 @@ export default function App() {
                             value={searchQuery}
                             onChange={setSearchQuery}
                             onSearch={(q) => {
-                                if (data.length === 0) {
-                                    toast.error('먼저 엑셀 파일을 업로드해주세요.');
+                                if (data.length === 0 && track !== 'create') {
+                                    toast.error('먼저 엑셀 파일을 업로드하거나 생성 모드를 선택해주세요.');
                                     return;
                                 }
                                 handleSearch(q);
@@ -154,7 +166,11 @@ export default function App() {
                             {suggestedQueries.map((q, idx) => (
                                 <button
                                     key={idx}
-                                    onClick={() => { setSearchQuery(q); if (data.length > 0) handleSearch(q); else toast.error('먼저 파일을 업로드해주세요.'); }}
+                                    onClick={() => {
+                                        setSearchQuery(q);
+                                        if (data.length > 0 || track === 'create') handleSearch(q);
+                                        else toast.error('먼저 트랙을 선택해주세요.');
+                                    }}
                                     className="px-4 py-1.5 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:border-indigo-500 dark:hover:border-indigo-500 hover:text-indigo-500 transition-all shadow-sm"
                                 >
                                     {q}
@@ -163,7 +179,36 @@ export default function App() {
                         </div>
                     </div>
 
-                    <div className={`transition-all duration-700 overflow-hidden ${showUpload ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}>
+                    {track === 'home' && data.length === 0 && (
+                        <div className="grid md:grid-cols-2 gap-6 pt-8 animate-in fade-in slide-in-from-bottom-4 duration-700 delay-300">
+                            <button
+                                onClick={() => setTrack('modify')}
+                                className="group p-8 bg-white dark:bg-[#1a1a1a] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-3xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all text-left space-y-4"
+                            >
+                                <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                                    <FileEdit className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">기존 파일 업로드</h3>
+                                    <p className="text-gray-500 dark:text-gray-400">엑셀 파일을 올려서 분석하고 수정해보세요.</p>
+                                </div>
+                            </button>
+                            <button
+                                onClick={() => { setTrack('create'); setData([]); setFilteredData([]); }}
+                                className="group p-8 bg-white dark:bg-[#1a1a1a] border-2 border-dashed border-gray-200 dark:border-gray-800 rounded-3xl hover:border-indigo-500 dark:hover:border-indigo-500 transition-all text-left space-y-4"
+                            >
+                                <div className="p-3 bg-indigo-500/10 rounded-2xl w-fit group-hover:bg-indigo-500 group-hover:text-white transition-colors">
+                                    <FilePlus className="w-8 h-8" />
+                                </div>
+                                <div>
+                                    <h3 className="text-xl font-bold text-gray-900 dark:text-white">새 시트 생성</h3>
+                                    <p className="text-gray-500 dark:text-gray-400">빈 시트에서 자연어로 데이터를 만들어보세요.</p>
+                                </div>
+                            </button>
+                        </div>
+                    )}
+
+                    <div className={`transition-all duration-700 overflow-hidden ${track === 'modify' && data.length === 0 ? 'max-h-[500px] opacity-100 mt-8' : 'max-h-0 opacity-0 pointer-events-none'}`}>
                         <UploadZone onDataLoaded={(d) => { setData(d); setFilteredData(d); toast.success('파일이 성공적으로 로드되었습니다. 이제 검색해보세요!'); }} />
                     </div>
                 </div>
@@ -185,7 +230,15 @@ export default function App() {
                         </div>
                     ) : (
                         <>
-                            {analysis && (
+                            {analysis && analysis.intent === 'calculation' && analysis.calculatedValue !== undefined && (
+                                <ResultCard
+                                    value={analysis.calculatedValue}
+                                    unit={analysis.unit}
+                                    explanation={analysis.explanation}
+                                />
+                            )}
+
+                            {analysis && analysis.intent === 'filtering' && (
                                 <div className="animate-in fade-in zoom-in-95 duration-500">
                                     <AnalysisCard analysis={analysis} />
                                 </div>
@@ -202,13 +255,22 @@ export default function App() {
                                 {data.length > 0 ? 'Processed Data Grid' : 'Data Preview'}
                             </h3>
                             {data.length > 0 && (
-                                <button
-                                    onClick={handleExport}
-                                    className="flex items-center gap-2 px-6 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-green-600/30 hover:shadow-green-600/50 hover:scale-[1.02] active:scale-95"
-                                >
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
-                                    Export Data
-                                </button>
+                                <div className="flex items-center gap-2">
+                                    <button
+                                        onClick={() => toast.info('Google Sheets 연동은 현재 준비 중인 기능입니다.')}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/30 hover:shadow-indigo-600/50 hover:scale-[1.02] active:scale-95"
+                                    >
+                                        <Share2 className="w-4 h-4" />
+                                        Google Sheets
+                                    </button>
+                                    <button
+                                        onClick={handleExport}
+                                        className="flex items-center gap-2 px-4 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-green-600/30 hover:shadow-green-600/50 hover:scale-[1.02] active:scale-95"
+                                    >
+                                        <Download className="w-4 h-4" />
+                                        Excel Download
+                                    </button>
+                                </div>
                             )}
                         </div>
                         <div className="max-h-[600px] overflow-auto">

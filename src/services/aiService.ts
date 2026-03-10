@@ -3,54 +3,61 @@ import axios from 'axios';
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
 export interface AIAnalysisResult {
+    intent: 'calculation' | 'filtering' | 'generation';
+    explanation: string;
     formula: string;
-    plan: string;
-    references: string[];
-    filterCriteria?: (row: any) => boolean;
+    plan: string[];
+    calculatedValue?: string | number;
+    unit?: string;
+    generatedData?: any[];
+    fuzzyColumnMatch?: Record<string, string>;
 }
 
 export const processNaturalLanguageQuery = async (
     query: string,
     columns: string[],
-    sampleData: any[]
+    data: any[]
 ): Promise<AIAnalysisResult> => {
     if (!OPENAI_API_KEY) {
-        // Fallback to basic keyword matching if no API key is provided
-        const keywords = query.toLowerCase().split(/and|&|,|\s+/).filter(k => k.length > 0);
-        return {
-            formula: `=FILTER(A:Z, AND(${keywords.map(k => `SEARCH("${k}", A:Z)>0`).join(', ')}))`,
-            plan: `[${keywords.join(', ')}] 키워드를 포함하는 데이터를 필터링합니다. (API 키를 등록하면 더 복잡한 분석이 가능합니다.)`,
-            references: ["전체 열(All Columns)"],
-            filterCriteria: (row: any) => {
-                const rowString = Object.values(row).map(String).join(' ').toLowerCase();
-                return keywords.every(kw => rowString.includes(kw));
-            }
-        };
+        throw new Error("OpenAI API Key가 설정되지 않았습니다.");
     }
 
     try {
+        const systemPrompt = `당신은 초정밀 엑셀 데이터 분석 및 생성 전문가입니다.
+사용자의 요청에 따라 다음 세 가지 중 하나를 수행합니다:
+1. **분석(calculation)**: 데이터 결과값 계산 (합계, 평균 등)
+2. **필터링(filtering)**: 조건에 맞는 데이터 추출
+3. **생성(generation)**: 새로운 샘플 데이터 생성
+
+**데이터 정보**:
+- 현재 로드된 열(Category): ${columns.join(', ')}
+
+**응답 형식(JSON)**:
+{
+  "intent": "calculation" | "filtering" | "generation",
+  "explanation": "사용자에게 보여줄 짧고 친절한 설명",
+  "formula": "사용된 수식이나 로직 설명",
+  "plan": ["단계별 작업 내용"],
+  "calculatedValue": "계산된 숫자나 결과값 (계산 인텐트일 때만)",
+  "unit": "결과값의 단위 (원, 명, 개 등)",
+  "generatedData": [{"열이름": "값"}], // 생성 인텐트일 때만
+  "fuzzyColumnMatch": {"사용자단어": "실제열이름"} // 열 이름이 불일치할 때 매핑
+}
+
+**주의사항**:
+- '매출', '금액', '가격' 등 유사한 의미를 가진 열은 자동으로 매핑하세요.
+- 계산/필터링 요청 시, 제공된 데이터 컬럼 정보를 참고하세요.
+- 생성 요청 시, 자연스러운 샘플 데이터 5개 이상을 생성하여 "generatedData"에 담아주세요.`;
+
         const response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
             {
-                model: 'gpt-4o-mini',
+                model: 'gpt-4o',
                 messages: [
-                    {
-                        role: 'system',
-                        content: `You are an Excel and Data Analysis expert. 
-            Analyze the user's natural language query based on the provided column names and sample data.
-            Return a JSON object with:
-            - formula: A valid Excel formula to perform this task.
-            - plan: A brief explanation (in Korean) of how you interpreted the request.
-            - references: The columns used for this analysis.
-            - filterLogic: A simple string representing the logical condition (e.g., "row['Name'] === 'John'").
-            
-            Column Names: ${columns.join(', ')}
-            Sample Data (first 2 rows): ${JSON.stringify(sampleData.slice(0, 2))}
-            `
-                    },
-                    { role: 'user', content: query }
+                    { role: 'system', content: systemPrompt },
+                    { role: 'user', content: `요청: "${query}"` }
                 ],
-                response_format: { type: 'json_object' }
+                response_format: { type: "json_object" }
             },
             {
                 headers: {
@@ -60,13 +67,8 @@ export const processNaturalLanguageQuery = async (
             }
         );
 
-        const result = JSON.parse(response.data.choices[0].message.content);
-
-        return {
-            formula: result.formula,
-            plan: result.plan,
-            references: result.references,
-        };
+        const result: AIAnalysisResult = JSON.parse(response.data.choices[0].message.content);
+        return result;
     } catch (error) {
         console.error('AI Processing Error:', error);
         throw error;
