@@ -11,6 +11,8 @@ export interface AIAnalysisResult {
     unit?: string;
     generatedData?: any[];
     fuzzyColumnMatch?: Record<string, string>;
+    operation?: 'sum' | 'count' | 'average' | 'max' | 'min' | 'none'; // Added
+    targetColumn?: string; // Added
 }
 
 export const processNaturalLanguageQuery = async (
@@ -38,14 +40,17 @@ export const processNaturalLanguageQuery = async (
   "explanation": "사용자에게 보여줄 짧고 친절한 설명",
   "formula": "사용된 수식이나 로직 설명",
   "plan": ["단계별 작업 내용"],
-  "calculatedValue": "계산된 숫자나 결과값 (계산 인텐트일 때만)",
-  "unit": "결과값의 단위 (원, 명, 개 등)",
+  "calculatedValue": "추론된 결과값 (참고용)",
+  "unit": "단위 (원, 명, 개 등)",
+  "operation": "sum" | "count" | "average" | "max" | "min" | "none",
+  "targetColumn": "매핑된 실제 열 이름",
   "generatedData": [{"열이름": "값"}], // 생성 인텐트일 때만
   "fuzzyColumnMatch": {"사용자단어": "실제열이름"} // 열 이름이 불일치할 때 매핑
 }
 
 **주의사항**:
-- '매출', '금액', '가격' 등 유사한 의미를 가진 열은 자동으로 매핑하세요.
+- '매출', '금액', '가격' 등 유사한 의미를 가진 열은 자동으로 매핑하여 "targetColumn"에 실제 열 이름을 넣으세요.
+- 만약 열을 도저히 찾을 수 없다면 "operation"을 "none"으로 하고 explanation에 친절한 오류 메시지를 적으세요.
 - 계산/필터링 요청 시, 제공된 데이터 컬럼 정보를 참고하세요.
 - 생성 요청 시, 자연스러운 샘플 데이터 5개 이상을 생성하여 "generatedData"에 담아주세요.`;
 

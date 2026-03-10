@@ -61,9 +61,35 @@ export default function App() {
                 setFilteredData(result.generatedData);
                 setAnalysis(null);
                 toast.success('데이터가 성공적으로 생성되었습니다.');
-            } else if (result.intent === 'calculation') {
+            } else if (result.intent === 'calculation' && result.operation && result.operation !== 'none') {
+                // Real-time Execution Engine Logic
+                const col = result.targetColumn;
+                if (!col || !columns.includes(col)) {
+                    toast.error(`해당하는 열('${col || '알 수 없음'}')을 찾을 수 없습니다. 열 이름을 확인해주세요.`);
+                    result.calculatedValue = "N/A";
+                    setAnalysis(result);
+                } else {
+                    const values = data.map(row => {
+                        const val = row[col];
+                        return typeof val === 'number' ? val : parseFloat(String(val).replace(/[^0-9.-]+/g, ""));
+                    }).filter(v => !isNaN(v));
+
+                    let calcResult: number = 0;
+                    switch (result.operation) {
+                        case 'sum': calcResult = values.reduce((a, b) => a + b, 0); break;
+                        case 'average': calcResult = values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0; break;
+                        case 'count': calcResult = values.length; break;
+                        case 'max': calcResult = Math.max(...values); break;
+                        case 'min': calcResult = Math.min(...values); break;
+                    }
+
+                    result.calculatedValue = calcResult;
+                    setAnalysis(result);
+                    toast.success('전체 데이터를 기반으로 계산을 완료했습니다.');
+                }
+            } else if (result.intent === 'calculation' && result.operation === 'none') {
                 setAnalysis(result);
-                toast.success('계산 결과가 도출되었습니다.');
+                toast.warning(result.explanation || '열을 찾을 수 없습니다.');
             } else {
                 setAnalysis(result);
                 const keywords = query.toLowerCase().split(/and|&|,|\s+/).filter(k => k.length > 0);
