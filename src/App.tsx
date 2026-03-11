@@ -94,9 +94,20 @@ export default function App() {
             } else if (result.intent === 'calculation') {
                 toast.success('분석이 완료되었습니다.');
             }
-        } catch (err) {
-            toast.error('AI 분석 중 오류가 발생했습니다. API 키를 확인해주세요.');
-            console.error(err);
+        } catch (err: any) {
+            // 에러 종류 별로 구체적인 메시지 표시
+            if (err?.message?.includes('VITE_OPENAI_API_KEY')) {
+                toast.error('❌ API 키 미설정: .env 파일에 VITE_OPENAI_API_KEY를 입력해주세요.');
+            } else if (err?.response?.status === 401) {
+                toast.error('❌ API 키 오류 (401): OpenAI 키가 유효하지 않습니다. 키를 다시 확인해주세요.');
+            } else if (err?.response?.status === 429) {
+                toast.error('⚠️ 요금 한도 초과 (429): OpenAI 플랜 한도에 도달했습니다.');
+            } else if (err?.response?.data?.error?.message) {
+                toast.error(`OpenAI 오류: ${err.response.data.error.message}`);
+            } else {
+                toast.error(`오류: ${err?.message || '알 수 없는 오류'}`);
+            }
+            console.error('AI Error details:', err?.response?.data || err?.message || err);
         } finally {
             setIsLoading(false);
         }
