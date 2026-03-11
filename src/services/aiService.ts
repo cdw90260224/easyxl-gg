@@ -2,73 +2,83 @@ import axios from 'axios';
 
 const OPENAI_API_KEY = import.meta.env.VITE_OPENAI_API_KEY;
 
+export interface SelectionContext {
+    selectedData: any[][];
+    rangeCoords: {
+        startRow: number;
+        startCol: number;
+        endRow: number;
+        endCol: number;
+    } | null;
+}
+
 export interface AIAnalysisResult {
-    intent: 'calculation' | 'filtering' | 'generation';
+    intent: 'calculation' | 'filtering' | 'generation' | 'update';
+    formula?: string;
     explanation: string;
-    formula: string;
-    plan: string[];
-    calculatedValue?: string | number;
-    unit?: string;
+    plan?: string;
+    references?: string[];
+    operation?: 'sum' | 'count' | 'average' | 'max' | 'min' | 'none';
+    targetColumn?: string;
+    filterColumn?: string;
+    filterValue?: string;
+    filterOperator?: 'equals' | 'contains' | 'greater' | 'less';
     generatedData?: any[];
-    fuzzyColumnMatch?: Record<string, string>;
-    operation?: 'sum' | 'count' | 'average' | 'max' | 'min' | 'none'; // Added
-    targetColumn?: string; // Added
-    filterColumn?: string; // Added
-    filterValue?: string; // Added
-    filterOperator?: 'equals' | 'contains' | 'greater' | 'less'; // Added
+    updates?: Array<{ row: number; col: number; value: any }>;
+    unit?: string;
+    calculatedValue?: any;
 }
 
 export const processNaturalLanguageQuery = async (
     query: string,
     columns: string[],
-    data: any[]
+    fullData: any[],
+    selection?: SelectionContext
 ): Promise<AIAnalysisResult> => {
     if (!OPENAI_API_KEY) {
-        throw new Error("OpenAI API Key가 설정되지 않았습니다.");
+        throw new Error('OpenAI API Key is required for this operation.');
     }
 
     try {
-        const systemPrompt = `당신은 초정밀 엑셀 데이터 분석 및 생성 전문가입니다.
-사용자의 요청에 따라 다음 세 가지 중 하나를 수행합니다:
-1. **분석(calculation)**: 데이터 결과값 계산 (합계, 평균 등)
-2. **필터링(filtering)**: 조건에 맞는 데이터 추출
-3. **생성(generation)**: 새로운 샘플 데이터 생성
-
-**데이터 정보**:
-- 현재 로드된 열(Category): ${columns.join(', ')}
-
-**응답 형식(JSON)**:
-{
-  "intent": "calculation" | "filtering" | "generation",
-  "explanation": "사용자에게 보여줄 짧고 친절한 설명",
-  "formula": "사용된 수식이나 로직 설명",
-  "plan": ["단계별 작업 내용"],
-  "calculatedValue": "추론된 결과값 (참고용)",
-  "unit": "단위 (원, 명, 개 등)",
-  "operation": "sum" | "count" | "average" | "max" | "min" | "none",
-  "targetColumn": "계산용 매핑된 열 이름",
-  "filterColumn": "필터용 매핑된 열 이름",
-  "filterValue": "필터링할 값",
-  "filterOperator": "equals" | "contains" | "greater" | "less",
-  "generatedData": [{"열이름": "값"}],
-  "fuzzyColumnMatch": {"사용자단어": "실제열이름"}
-}
-
-**주의사항**:
-- 필터링 요청 시: 사용자가 "이름이 차도운인 사람"이라고 하면 filterColumn: "이름", filterValue: "차도운", filterOperator: "contains" (또는 equals)로 설정하세요.
-- 불필요한 조사("인", "해줘", "필터링")는 무시하고 핵심 데이터 조건만 추출하세요.
-- 계산/필터링 요청 시, 제공된 데이터 컬럼 정보를 참고하세요.
-- 생성 요청 시, 자연스러운 샘플 데이터 5개 이상을 생성하여 "generatedData"에 담아주세요.`;
-
         const response = await axios.post(
             'https://api.openai.com/v1/chat/completions',
             {
                 model: 'gpt-4o',
                 messages: [
-                    { role: 'system', content: systemPrompt },
-                    { role: 'user', content: `요청: "${query}"` }
+                    {
+                        role: 'system',
+                        content: `You are an AI Excel Agent for EasyXL.GG. 
+Analyze the user's natural language query and context to perform data tasks.
+Return a JSON object in the following format:
+{
+  "intent": "calculation" | "filtering" | "generation" | "update",
+  "explanation": "Brief Korean explanation",
+  "formula": "Excel-style formula (if applicable)",
+  "operation": "sum" | "count" | "average" | "max" | "min" | "none",
+  "targetColumn": "Mapped column name",
+  "filterColumn": "Column for filtering",
+  "filterValue": "Value for filtering",
+  "filterOperator": "equals" | "contains" | "greater" | "less",
+  "generatedData": [{"col": "val"}],
+  "updates": [{"row": 0, "col": 0, "value": 123}],
+  "unit": "Unit like 원, 명, %",
+  "calculatedValue": "Inferred value (for reference)"
+}
+
+**Selection Awareness**:
+If selection is provided, assume the user is referring to the selected range.
+For "Update" intent: return a list of specific cells to change in "updates".
+Example: "이 구간 10% 인상" -> Find current values in selection and return new values at those specific row/col indices.
+
+Columns: ${columns.join(', ')}
+Current Selection Coords: ${JSON.stringify(selection?.rangeCoords)}
+Selection Data Snippet: ${JSON.stringify(selection?.selectedData?.slice(0, 3))}
+Full Data Snippet (first 2): ${JSON.stringify(fullData.slice(0, 2))}
+`
+                    },
+                    { role: 'user', content: query }
                 ],
-                response_format: { type: "json_object" }
+                response_format: { type: 'json_object' }
             },
             {
                 headers: {
@@ -78,8 +88,7 @@ export const processNaturalLanguageQuery = async (
             }
         );
 
-        const result: AIAnalysisResult = JSON.parse(response.data.choices[0].message.content);
-        return result;
+        return JSON.parse(response.data.choices[0].message.content);
     } catch (error) {
         console.error('AI Processing Error:', error);
         throw error;
