@@ -176,10 +176,10 @@ export default function App() {
                 <div className="w-full max-w-4xl space-y-8 text-center">
                     <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-700">
                         <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white transition-all">
-                            엑셀의 미래, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600">선택 영역까지 이해하는 AI 에이전트</span>
+                            당신의 엑셀, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600">일상언어로 완벽하게 제어하세요</span>
                         </h2>
                         <p className="text-base text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-                            그리드에서 영역을 선택하고 명령해보세요. AI가 맥락을 정확히 이해합니다.
+                            파일을 업로드하고 원하는 작업을 자연어로 입력만 하세요.
                         </p>
                     </div>
 
@@ -211,11 +211,19 @@ export default function App() {
                     </div>
 
                     <div className={`transition-all duration-700 overflow-hidden ${showUpload ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0 pointer-events-none'}`}>
-                        <UploadZone onDataLoaded={(d) => { setData(d); setFilteredData(d); toast.success('파일이 성공적으로 로드되었습니다.'); }} />
+                        <UploadZone onDataLoaded={(d) => {
+                            setData(d);
+                            setFilteredData(d);
+                            toast.success(`${d.length}행의 데이터가 로드되었습니다!`);
+                            // Scroll to grid after short delay for animation
+                            setTimeout(() => {
+                                document.getElementById('data-grid-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                            }, 600);
+                        }} />
                     </div>
                 </div>
 
-                <div ref={resultsRef} className="w-full max-w-6xl space-y-8 animate-in fade-in slide-in-from-bottom-8 duration-700 pb-20">
+                <div id="data-grid-section" className="w-full max-w-6xl space-y-8 pb-20">
                     {isLoading && (
                         <div className="flex flex-col items-center justify-center p-12 space-y-4">
                             <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
