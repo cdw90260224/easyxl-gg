@@ -101,7 +101,8 @@ export default function App() {
             } else if (err?.response?.status === 401) {
                 toast.error('❌ API 키 오류 (401): Gemini 키가 유효하지 않습니다. 키를 다시 확인해주세요.');
             } else if (err?.response?.status === 429) {
-                toast.error('⚠️ 요금 한도 초과 (429): Gemini 플랜 한도에 도달했습니다.');
+                const geminiMsg = err.response.data?.error?.message || '';
+                toast.error(`⚠️ 요금 한도 초과 (429): ${geminiMsg || 'Gemini 플랜 한도에 도달했습니다. 1분만 기다려주세요.'}`);
             } else if (err?.response?.data?.error?.message) {
                 toast.error(`Gemini 오류: ${err.response.data.error.message}`);
             } else {

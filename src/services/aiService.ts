@@ -2,7 +2,12 @@ import axios from 'axios';
 
 const getGeminiConfig = () => {
     const key = import.meta.env.VITE_GEMINI_API_KEY;
-    console.log('[DEBUG] Gemini API Key status:', key ? 'FOUND (Starts with ' + key.substring(0, 4) + '...)' : 'NOT FOUND');
+    console.log('[DEBUG] Gemini Config:', {
+        hasKey: !!key,
+        keyLength: key?.length,
+        keyStart: key?.substring(0, 4)
+    });
+    // 새 프로젝트의 키이므로 최신 모델인 gemini-2.0-flash를 사용
     return {
         key,
         url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`
@@ -134,29 +139,31 @@ export const processNaturalLanguageQuery = async (
 ${selection?.rangeCoords ? `선택 범위: Row ${selection.rangeCoords.startRow + 1}~${selection.rangeCoords.endRow + 1}` : ''}
 ${selection?.selectedData?.length ? `선택 데이터: ${JSON.stringify(selection.selectedData.slice(0, 5))}` : ''}`;
 
+    // v1 API와의 호환성을 위해 system_instruction 대신 첫 번째 메시지에 지시사항을 통합
+    const combinedPrompt = `${systemPrompt}\n\n사용자 쿼리: ${query}`;
+
     const response = await axios.post(
         GEMINI_API_URL,
         {
-            system_instruction: {
-                parts: [{ text: systemPrompt }]
-            },
             contents: [
-                { role: 'user', parts: [{ text: query }] }
+                { role: 'user', parts: [{ text: combinedPrompt }] }
             ],
             generationConfig: {
-                responseMimeType: 'application/json',
                 temperature: 0.1,
-                maxOutputTokens: 1024
+                maxOutputTokens: 2048
             }
         },
         {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 15000
+            timeout: 20000
         }
     );
 
-    const rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    let rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) throw new Error('Gemini API 응답이 비어있습니다.');
+
+    // 마크다운 코드 블록(```json ... ```) 제거 로직 추가
+    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
 
     const result = JSON.parse(rawText) as AIAnalysisResult;
 
