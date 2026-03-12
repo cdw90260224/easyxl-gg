@@ -1,7 +1,13 @@
 import axios from 'axios';
 
-const GEMINI_API_KEY = import.meta.env.VITE_GEMINI_API_KEY;
-const GEMINI_API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${GEMINI_API_KEY}`;
+const getGeminiConfig = () => {
+    const key = import.meta.env.VITE_GEMINI_API_KEY;
+    console.log('[DEBUG] Gemini API Key status:', key ? 'FOUND (Starts with ' + key.substring(0, 4) + '...)' : 'NOT FOUND');
+    return {
+        key,
+        url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`
+    };
+};
 
 export interface SelectionContext {
     selectedData: any[][];
@@ -35,8 +41,11 @@ export const processNaturalLanguageQuery = async (
     selection?: SelectionContext
 ): Promise<AIAnalysisResult> => {
 
-    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here') {
-        throw new Error('VITE_GEMINI_API_KEY가 설정되지 않았습니다.');
+    const { key: GEMINI_API_KEY, url: GEMINI_API_URL } = getGeminiConfig();
+
+    if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here' || GEMINI_API_KEY === '') {
+        console.error('[CRITICAL] Gemini API Key is missing or default. Please check your .env file.');
+        throw new Error('VITE_GEMINI_API_KEY가 설정되지 않았습니다. .env 파일에 실제 API 키를 입력해주세요.');
     }
 
     // ── 선택 영역 계산은 클라이언트에서 직접 처리 (무료 + 빠름) ──
