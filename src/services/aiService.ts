@@ -107,6 +107,7 @@ export const processNaturalLanguageQuery = async (
     }
 
     // ── Gemini API 호출 (복잡한 명령) ──
+    const hasContext = columns.length > 0;
     const systemPrompt = `당신은 EasyXL.GG의 AI 엑셀 에이전트입니다.
 사용자의 자연어 쿼리를 분석하여 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요.
 
@@ -120,24 +121,26 @@ export const processNaturalLanguageQuery = async (
   "filterColumn": "필터 열 이름",
   "filterValue": "필터 값",
   "filterOperator": "equals" | "contains" | "greater" | "less",
-  "generatedData": [{"열이름": "값"}],
+  "generatedData": [{"열이름": "값", "열이름2": "값2"}],
   "updates": [{"row": 숫자, "col": 숫자, "value": 값}],
   "unit": "단위",
   "calculatedValue": 숫자
 }
 
 규칙:
-- 필터링 요청 → intent:"filtering", filterColumn/filterValue/filterOperator 설정
-- 계산 요청 → intent:"calculation", operation/targetColumn 설정
-- 수정 요청 → intent:"update", updates 배열 설정
-- 데이터 생성 → intent:"generation", generatedData 설정
+- 데이터 생성 요청 (예: "~ 데이터를 만들어줘", "~ 매장 리스트 생성") → intent: "generation"
+  - ${hasContext ? '기존 데이터의 열 구조를 따르거나 필요시 새 구조를 만드세요.' : '새로운 데이터 구조(열 이름들)를 정의하고 데이터를 생성하세요.'}
+  - generatedData 배열에 객체들을 5개 이상(명시적 요청 없으면) 포함시키세요.
+- 필터링 요청 → intent: "filtering", filterColumn/filterValue/filterOperator 설정
+- 계산 요청 → intent: "calculation", operation/targetColumn 설정
+- 수정 요청 → intent: "update", updates 배열 설정
 
 데이터 컨텍스트:
-열 목록: ${columns.join(', ')}
-전체 행 수: ${fullData.length}
-데이터 샘플(첫 3행): ${JSON.stringify(fullData.slice(0, 3))}
-${selection?.rangeCoords ? `선택 범위: Row ${selection.rangeCoords.startRow + 1}~${selection.rangeCoords.endRow + 1}` : ''}
-${selection?.selectedData?.length ? `선택 데이터: ${JSON.stringify(selection.selectedData.slice(0, 5))}` : ''}`;
+${hasContext ? `- 열 목록: ${columns.join(', ')}
+- 전체 행 수: ${fullData.length}
+- 데이터 샘플(첫 3행): ${JSON.stringify(fullData.slice(0, 3))}
+${selection?.rangeCoords ? `- 선택 범위: Row ${selection.rangeCoords.startRow + 1}~${selection.rangeCoords.endRow + 1}` : ''}
+${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(selection.selectedData.slice(0, 5))}` : ''}` : '- 현재 로드된 데이터가 없습니다. 사용자의 요청에 기반하여 새로운 데이터를 생성하세요.'}`;
 
     // v1 API와의 호환성을 위해 system_instruction 대신 첫 번째 메시지에 지시사항을 통합
     const combinedPrompt = `${systemPrompt}\n\n사용자 쿼리: ${query}`;

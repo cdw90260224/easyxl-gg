@@ -175,7 +175,6 @@ export default function App() {
                         value={searchQuery}
                         onChange={setSearchQuery}
                         onSearch={(q) => {
-                            if (!hasData) { toast.error('먼저 엑셀 파일을 업로드해주세요.'); return; }
                             handleSearch(q);
                         }}
                     />
