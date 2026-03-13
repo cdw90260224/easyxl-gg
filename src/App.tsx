@@ -10,6 +10,7 @@ import PrivacyModal from './components/PrivacyModal';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
 import { processNaturalLanguageQuery, type AIAnalysisResult, type SelectionContext, type ChartConfig } from './services/aiService';
+import { saveSheet, listSheets, getSheet, deleteSheet, type SheetRecord } from './services/sheetService';
 
 export default function App() {
     const [data, setData] = useState<any[]>([]);
@@ -22,6 +23,9 @@ export default function App() {
     const [selectedRange, setSelectedRange] = useState<SelectionContext['rangeCoords']>(null);
     const [isDark, setIsDark] = useState(true);
     const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
+    const [savedSheets, setSavedSheets] = useState<SheetRecord[]>([]);
+    const [showSavedSheets, setShowSavedSheets] = useState(false);
+    const [isSaving, setIsSaving] = useState(false);
 
     useEffect(() => {
         if (isDark) document.documentElement.classList.add('dark');
@@ -142,6 +146,48 @@ export default function App() {
             XLSX.writeFile(wb, 'easyxl_export.xlsx');
             toast.success('엑셀 파일로 내보냈습니다!');
         } catch { toast.error('내보내기 중 오류가 발생했습니다.'); }
+    };
+
+    const handleSaveToDb = async () => {
+        if (filteredData.length === 0) { toast.warning('저장할 데이터가 없습니다.'); return; }
+        const title = prompt('시트 제목을 입력하세요:', `EasyXL 시트 ${new Date().toLocaleDateString('ko-KR')}`);
+        if (!title) return;
+        setIsSaving(true);
+        try {
+            const columns = Object.keys(filteredData[0]).map(key => ({ field: key, headerName: key }));
+            await saveSheet(title, columns, filteredData);
+            toast.success(`✅ "${title}" 시트가 DB에 저장되었습니다!`);
+        } catch (err: any) {
+            toast.error(`DB 저장 실패: ${err?.message || '알 수 없는 오류'}`);
+            console.error('Save error:', err);
+        } finally {
+            setIsSaving(false);
+        }
+    };
+
+    const handleLoadSheetList = async () => {
+        try {
+            const sheets = await listSheets();
+            setSavedSheets(sheets);
+            setShowSavedSheets(true);
+            if (sheets.length === 0) toast.info('저장된 시트가 없습니다.');
+        } catch (err: any) {
+            toast.error(`시트 목록 조회 실패: ${err?.message || '알 수 없는 오류'}`);
+        }
+    };
+
+    const handleLoadSheet = async (id: string) => {
+        try {
+            const sheet = await getSheet(id);
+            setData(sheet.rows);
+            setFilteredData(sheet.rows);
+            setAnalysis(null);
+            setChartConfig(null);
+            setShowSavedSheets(false);
+            toast.success(`📂 "${sheet.title}" 시트를 불러왔습니다!`);
+        } catch (err: any) {
+            toast.error(`시트 불러오기 실패: ${err?.message || '알 수 없는 오류'}`);
+        }
     };
 
     const hasData = data.length > 0;
@@ -276,6 +322,21 @@ export default function App() {
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
                                         Export Excel
                                     </button>
+                                    <button
+                                        onClick={handleSaveToDb}
+                                        disabled={isSaving}
+                                        className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/30 active:scale-95 disabled:opacity-50"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+                                        {isSaving ? '저장 중...' : 'DB 저장'}
+                                    </button>
+                                    <button
+                                        onClick={handleLoadSheetList}
+                                        className="flex items-center gap-2 px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-600/30 active:scale-95"
+                                    >
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+                                        내 시트
+                                    </button>
                                 </div>
                             </div>
 
@@ -295,6 +356,48 @@ export default function App() {
                                 다른 파일 업로드하기
                             </button>
                         </div>
+
+                        {/* ── 저장된 시트 목록 ── */}
+                        {showSavedSheets && savedSheets.length > 0 && (
+                            <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in-95 duration-300">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+                                        저장된 시트 ({savedSheets.length})
+                                    </h3>
+                                    <button onClick={() => setShowSavedSheets(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                    </button>
+                                </div>
+                                <div className="space-y-2">
+                                    {savedSheets.map(sheet => (
+                                        <div key={sheet.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-[#262626] hover:bg-gray-100 dark:hover:bg-[#333] transition-colors">
+                                            <button
+                                                onClick={() => handleLoadSheet(sheet.id)}
+                                                className="flex-1 text-left"
+                                            >
+                                                <span className="font-medium text-gray-900 dark:text-gray-100">{sheet.title}</span>
+                                                <span className="block text-xs text-gray-400 mt-0.5">
+                                                    {new Date(sheet.created_at).toLocaleString('ko-KR')}
+                                                </span>
+                                            </button>
+                                            <button
+                                                onClick={async () => {
+                                                    try {
+                                                        await deleteSheet(sheet.id);
+                                                        setSavedSheets(prev => prev.filter(s => s.id !== sheet.id));
+                                                        toast.success('시트가 삭제되었습니다.');
+                                                    } catch { toast.error('삭제 실패'); }
+                                                }}
+                                                className="ml-3 p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
                     </div>
                 )}
             </main>
