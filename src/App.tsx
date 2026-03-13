@@ -5,10 +5,11 @@ import SearchBar from './components/SearchBar';
 import AnalysisCard from './components/AnalysisCard';
 import InteractiveGrid from './components/InteractiveGrid';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
+import AIChartPanel from './components/AIChartPanel';
 import PrivacyModal from './components/PrivacyModal';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx';
-import { processNaturalLanguageQuery, type AIAnalysisResult, type SelectionContext } from './services/aiService';
+import { processNaturalLanguageQuery, type AIAnalysisResult, type SelectionContext, type ChartConfig } from './services/aiService';
 
 export default function App() {
     const [data, setData] = useState<any[]>([]);
@@ -20,6 +21,7 @@ export default function App() {
     const [isLoading, setIsLoading] = useState(false);
     const [selectedRange, setSelectedRange] = useState<SelectionContext['rangeCoords']>(null);
     const [isDark, setIsDark] = useState(true);
+    const [chartConfig, setChartConfig] = useState<ChartConfig | null>(null);
 
     useEffect(() => {
         if (isDark) document.documentElement.classList.add('dark');
@@ -53,9 +55,13 @@ export default function App() {
             }
             const result = await processNaturalLanguageQuery(query, columns, data, selectionContext);
             setAnalysis(result);
+            setChartConfig(null); // 새 분석 시 이전 차트 초기화
             if (result.intent === 'generation' && result.generatedData) {
                 setData(result.generatedData); setFilteredData(result.generatedData);
-                toast.success('데이터를 생성했습니다.');
+                toast.success(`✨ ${result.generatedData.length}행의 데이터를 AI가 생성했습니다.`);
+            } else if (result.intent === 'chart' && result.chartConfig) {
+                setChartConfig(result.chartConfig);
+                toast.success(`📊 ${result.chartConfig.chartType.toUpperCase()} 차트를 생성했습니다.`);
             } else if (result.intent === 'update' && result.updates) {
                 const newData = data.map((row, ri) => {
                     const upd = result.updates!.find(u => u.row === ri);
@@ -138,13 +144,20 @@ export default function App() {
         } catch { toast.error('내보내기 중 오류가 발생했습니다.'); }
     };
 
-    const suggestedQueries = [
-        "이름이 '차도운'인 행 필터링",
-        "매출 합계 계산",
-        "선택한 영역 10% 인상해줘",
-    ];
-
     const hasData = data.length > 0;
+
+    const suggestedQueries = hasData
+        ? [
+            "매출 합계 계산",
+            "매출을 바 차트로 보여줘",
+            "선택한 영역 10% 인상해줘",
+        ]
+        : [
+            "커피 브랜드 매출 데이터 5개 생성",
+            "서울 주요 구 인구수 표 만들어줘",
+            "세계 주요 도시 날씨 정보 생성",
+        ];
+
 
     return (
         <div className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0f0f12] transition-colors duration-500 font-sans">
@@ -167,7 +180,7 @@ export default function App() {
                             당신의 엑셀, <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-500 to-purple-600">일상언어로 완벽하게 제어하세요</span>
                         </h2>
                         <p className="text-base text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-                            파일을 업로드하고 원하는 작업을 자연어로 입력만 하세요.
+                            파일 업로드 또는 자연어로 데이터를 생성하고, 차트로 시각화하세요.
                         </p>
                     </div>
 
@@ -184,7 +197,7 @@ export default function App() {
                         {suggestedQueries.map((q, idx) => (
                             <button
                                 key={idx}
-                                onClick={() => { setSearchQuery(q); if (hasData) handleSearch(q); else toast.error('먼저 파일을 업로드해주세요.'); }}
+                                onClick={() => { setSearchQuery(q); handleSearch(q); }}
                                 className="px-4 py-1.5 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:border-indigo-500 hover:text-indigo-500 transition-all shadow-sm"
                             >
                                 {q}
@@ -212,6 +225,17 @@ export default function App() {
                 {!isLoading && analysis && (
                     <div className="w-full max-w-6xl animate-in fade-in zoom-in-95 duration-500">
                         <AnalysisCard analysis={analysis} />
+                    </div>
+                )}
+
+                {/* ── Talk-to-Chart 패널 ── */}
+                {!isLoading && chartConfig && hasData && (
+                    <div className="w-full max-w-6xl animate-in fade-in zoom-in-95 duration-500">
+                        <AIChartPanel
+                            data={filteredData}
+                            chartConfig={chartConfig}
+                            onClose={() => setChartConfig(null)}
+                        />
                     </div>
                 )}
 

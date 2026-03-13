@@ -24,8 +24,15 @@ export interface SelectionContext {
     } | null;
 }
 
+export interface ChartConfig {
+    chartType: 'bar' | 'pie' | 'line' | 'area';
+    xAxis: string;
+    yAxis: string;
+    title: string;
+}
+
 export interface AIAnalysisResult {
-    intent: 'calculation' | 'filtering' | 'generation' | 'update';
+    intent: 'calculation' | 'filtering' | 'generation' | 'update' | 'chart';
     explanation: string;
     formula?: string;
     operation?: 'sum' | 'count' | 'average' | 'max' | 'min' | 'none';
@@ -37,6 +44,7 @@ export interface AIAnalysisResult {
     updates?: Array<{ row: number; col: number; value: any }>;
     unit?: string;
     calculatedValue?: number | string;
+    chartConfig?: ChartConfig;
 }
 
 export const processNaturalLanguageQuery = async (
@@ -113,7 +121,7 @@ export const processNaturalLanguageQuery = async (
 
 응답 JSON 형식:
 {
-  "intent": "calculation" | "filtering" | "generation" | "update",
+  "intent": "calculation" | "filtering" | "generation" | "update" | "chart",
   "explanation": "한국어 설명",
   "formula": "엑셀 수식 (선택)",
   "operation": "sum" | "count" | "average" | "max" | "min" | "none",
@@ -124,13 +132,17 @@ export const processNaturalLanguageQuery = async (
   "generatedData": [{"열이름": "값", "열이름2": "값2"}],
   "updates": [{"row": 숫자, "col": 숫자, "value": 값}],
   "unit": "단위",
-  "calculatedValue": 숫자
+  "calculatedValue": 숫자,
+  "chartConfig": {"chartType": "bar|pie|line|area", "xAxis": "X축 열이름", "yAxis": "Y축 열이름", "title": "차트 제목"}
 }
 
 규칙:
 - 데이터 생성 요청 (예: "~ 데이터를 만들어줘", "~ 매장 리스트 생성") → intent: "generation"
   - ${hasContext ? '기존 데이터의 열 구조를 따르거나 필요시 새 구조를 만드세요.' : '새로운 데이터 구조(열 이름들)를 정의하고 데이터를 생성하세요.'}
   - generatedData 배열에 객체들을 5개 이상(명시적 요청 없으면) 포함시키세요.
+- 차트/시각화 요청 (예: "~ 차트로 보여줘", "~ 그래프 그려줘", "시각화") → intent: "chart"
+  - chartConfig에 chartType(bar/pie/line/area), xAxis(카테고리 열), yAxis(수치 열), title 설정
+  - xAxis와 yAxis는 반드시 현재 데이터의 열 이름 중에서 선택하세요.
 - 필터링 요청 → intent: "filtering", filterColumn/filterValue/filterOperator 설정
 - 계산 요청 → intent: "calculation", operation/targetColumn 설정
 - 수정 요청 → intent: "update", updates 배열 설정
