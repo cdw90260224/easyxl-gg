@@ -9,13 +9,19 @@ export interface SheetRecord {
     updated_at: string;
 }
 
+const ensureSupabase = () => {
+    if (!supabase) throw new Error('Supabase가 설정되지 않았습니다. 환경변수를 확인해주세요.');
+    return supabase;
+};
+
 // ── 시트 저장 ──
 export const saveSheet = async (
     title: string,
     columns: Array<{ field: string; headerName: string }>,
     rows: any[]
 ): Promise<SheetRecord> => {
-    const { data, error } = await supabase
+    const db = ensureSupabase();
+    const { data, error } = await db
         .from('sheets')
         .insert({ title, columns, rows })
         .select()
@@ -27,7 +33,8 @@ export const saveSheet = async (
 
 // ── 시트 목록 조회 ──
 export const listSheets = async (): Promise<SheetRecord[]> => {
-    const { data, error } = await supabase
+    const db = ensureSupabase();
+    const { data, error } = await db
         .from('sheets')
         .select('id, title, created_at, updated_at')
         .order('created_at', { ascending: false })
@@ -39,7 +46,8 @@ export const listSheets = async (): Promise<SheetRecord[]> => {
 
 // ── 시트 상세 조회 ──
 export const getSheet = async (id: string): Promise<SheetRecord> => {
-    const { data, error } = await supabase
+    const db = ensureSupabase();
+    const { data, error } = await db
         .from('sheets')
         .select('*')
         .eq('id', id)
@@ -51,7 +59,8 @@ export const getSheet = async (id: string): Promise<SheetRecord> => {
 
 // ── 시트 삭제 ──
 export const deleteSheet = async (id: string): Promise<void> => {
-    const { error } = await supabase
+    const db = ensureSupabase();
+    const { error } = await db
         .from('sheets')
         .delete()
         .eq('id', id);
