@@ -34,8 +34,13 @@ export default function App() {
     }, [isDark]);
 
     const handleDataLoaded = (d: any[]) => {
-        setData(d);
-        setFilteredData(d);
+        // 모든 행에 고유 ID 부여 (동기화 용도)
+        const dataWithIds = d.map((row, idx) => ({
+            ...row,
+            _id: row._id || `row_${idx}_${Date.now()}`
+        }));
+        setData(dataWithIds);
+        setFilteredData(dataWithIds);
         setAnalysis(null);
         toast.success(`✅ ${d.length}행의 데이터가 로드되었습니다!`);
     };
@@ -62,7 +67,11 @@ export default function App() {
             setAnalysis(result);
             setChartConfig(null); // 새 분석 시 이전 차트 초기화
             if (result.intent === 'generation' && result.generatedData) {
-                setData(result.generatedData); setFilteredData(result.generatedData);
+                const dataWithIds = result.generatedData.map((row, idx) => ({
+                    ...row,
+                    _id: `gen_${idx}_${Date.now()}`
+                }));
+                setData(dataWithIds); setFilteredData(dataWithIds);
                 toast.success(`✨ ${result.generatedData.length}행의 데이터를 AI가 생성했습니다.`);
             } else if (result.intent === 'chart' && result.chartConfig) {
                 setChartConfig(result.chartConfig);
@@ -129,7 +138,8 @@ export default function App() {
         try {
             if (filteredData.length === 0) { toast.warning('내보낼 데이터가 없습니다.'); return; }
             const exportData = filteredData.map(row => {
-                const newRow: any = { ...row };
+                const { _id, ...cleanRow } = row; // _id는 제외하고 내보냄
+                const newRow: any = { ...cleanRow };
                 if (isPrivacyMode) {
                     Object.keys(newRow).forEach(key => {
                         const lc = key.toLowerCase();
@@ -180,8 +190,12 @@ export default function App() {
     const handleLoadSheet = async (id: string) => {
         try {
             const sheet = await getSheet(id);
-            setData(sheet.rows);
-            setFilteredData(sheet.rows);
+            const dataWithIds = sheet.rows.map((row: any, idx: number) => ({
+                ...row,
+                _id: row._id || `db_${idx}_${Date.now()}`
+            }));
+            setData(dataWithIds);
+            setFilteredData(dataWithIds);
             setAnalysis(null);
             setChartConfig(null);
             setShowSavedSheets(false);
@@ -385,7 +399,15 @@ export default function App() {
                             <InteractiveGrid
                                 data={filteredData}
                                 onSelection={(r, c, r2, c2) => setSelectedRange({ startRow: r, startCol: c, endRow: r2, endCol: c2 })}
-                                onDataChange={(newData) => { setData(newData); setFilteredData(newData); }}
+                                onDataChange={(updatedFilteredData) => {
+                                    // 필터링된 데이터의 변경사항을 원본 데이터(data)에 병합
+                                    const newData = data.map(originalRow => {
+                                        const found = updatedFilteredData.find(u => u._id === originalRow._id);
+                                        return found ? found : originalRow;
+                                    });
+                                    setData(newData); 
+                                    setFilteredData(updatedFilteredData); 
+                                }}
                             />
                         </div>
 

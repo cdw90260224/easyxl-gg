@@ -27,7 +27,7 @@ export default function InteractiveGrid({ data, onSelection, onDataChange }: Int
         );
     }
 
-    const headers = Object.keys(data[0]);
+    const headers = Object.keys(data[0]).filter(h => h !== '_id');
 
     const isSelected = (row: number, col: number) => {
         if (!selStart || !selEnd) return false;
