@@ -1,0 +1,86 @@
+import { Moon, Sun, Shield, ShieldAlert, FileSpreadsheet } from 'lucide-react';
+import { useGoogleLogin } from '@react-oauth/google';
+import { useState } from 'react';
+import { toast } from 'sonner';
+
+export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivacyPolicy }: any) {
+    const [isSyncing, setIsSyncing] = useState(false);
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+
+    // Mock google login
+    const login = useGoogleLogin({
+        onSuccess: () => setIsLoggedIn(true),
+        onError: (error) => console.log('Login Failed:', error)
+    });
+
+    const handleSync = () => {
+        setIsSyncing(true);
+        setTimeout(() => {
+            setIsSyncing(false);
+            toast.success('성공적으로 구글 시트에 반영되었습니다 (시뮬레이션)');
+        }, 2000);
+    };
+
+    return (
+        <header className="glass-morphism sticky top-0 z-50 transition-colors shadow-sm dark:shadow-none border-b border-gray-200 dark:border-gray-800">
+            <div className="container mx-auto px-4 h-16 flex items-center justify-between">
+                <div className="flex items-center gap-2 cursor-pointer group hover:opacity-80 transition-opacity">
+                    <div className="p-2 bg-deepblue-500/10 rounded-xl group-hover:bg-deepblue-500/20 transition-colors">
+                        <FileSpreadsheet className="w-6 h-6 text-deepblue-600" />
+                    </div>
+                    <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
+                        EasyXL<span className="text-deepblue-600">.GG</span>
+                    </h1>
+                </div>
+
+                <div className="flex items-center gap-4">
+                    {/* Privacy Toggle */}
+                    <button
+                        onClick={onShowPrivacyPolicy}
+                        className={`flex items-center gap-2 px-3.5 py-1.5 rounded-full text-sm font-semibold transition-all ${isPrivacyMode ? 'bg-deepblue-50 text-deepblue-700 dark:bg-deepblue-500/10 dark:text-deepblue-400 ring-1 ring-deepblue-500/20'
+                            : 'bg-red-50 text-red-700 dark:bg-red-500/10 dark:text-red-400 ring-1 red-500/20'
+                            }`}
+                        title="개인정보 보호 정책 확인"
+                    >
+                        {isPrivacyMode ? <Shield className="w-4 h-4" /> : <ShieldAlert className="w-4 h-4" />}
+                        <span className="hidden sm:inline">{isPrivacyMode ? 'Privacy ON' : 'Privacy OFF'}</span>
+                    </button>
+
+                    <div className="w-px h-6 bg-gray-200 dark:bg-gray-800" />
+
+                    {/* Sync / Login */}
+                    {!isLoggedIn ? (
+                        <button
+                            onClick={() => login()}
+                            className="text-sm font-bold px-5 py-2 border border-gray-200 dark:border-gray-800 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-gray-700 dark:text-gray-300 shadow-sm"
+                        >
+                            Sign in with Google
+                        </button>
+                    ) : (
+                        <button
+                            onClick={handleSync}
+                            disabled={isSyncing}
+                            className="text-sm font-bold px-6 py-2.5 bg-deepblue-600 text-white rounded-xl hover:bg-deepblue-700 disabled:opacity-50 transition-all shadow-lg shadow-deepblue-500/20 flex items-center gap-2"
+                        >
+                            {isSyncing ? (
+                                <>
+                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                    동기화 중...
+                                </>
+                            ) : '구글 시트에 반영'}
+                        </button>
+                    )}
+
+                    {/* Theme Toggle */}
+                    <button
+                        onClick={toggleDark}
+                        className="p-2.5 text-gray-500 hover:text-gray-900 hover:bg-gray-100 rounded-xl dark:text-gray-400 dark:hover:text-gray-100 dark:hover:bg-gray-800 transition-all"
+                        title="테마 변경"
+                    >
+                        {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
+                    </button>
+                </div>
+            </div>
+        </header>
+    );
+}
