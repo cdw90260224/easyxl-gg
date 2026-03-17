@@ -32,7 +32,7 @@ export interface ChartConfig {
 }
 
 export interface AIAnalysisResult {
-    intent: 'calculation' | 'filtering' | 'generation' | 'update' | 'chart';
+    intent: 'calculation' | 'filtering' | 'generation' | 'update' | 'chart' | 'join';
     explanation: string;
     formula?: string;
     operation?: 'sum' | 'count' | 'average' | 'max' | 'min' | 'none';
@@ -45,13 +45,27 @@ export interface AIAnalysisResult {
     unit?: string;
     calculatedValue?: number | string;
     chartConfig?: ChartConfig;
+    joinConfig?: {
+        sourceSheetId: string;
+        targetSheetId: string;
+        sourceKey: string;
+        targetKey: string;
+        columnsToCopy: string[];
+    };
+}
+
+export interface SheetContext {
+    id: string;
+    name: string;
+    columns: string[];
 }
 
 export const processNaturalLanguageQuery = async (
     query: string,
     columns: string[],
     fullData: any[],
-    selection?: SelectionContext
+    selection?: SelectionContext,
+    allSheets?: SheetContext[]
 ): Promise<AIAnalysisResult> => {
 
     const { key: GEMINI_API_KEY, url: GEMINI_API_URL } = getGeminiConfig();
@@ -116,12 +130,12 @@ export const processNaturalLanguageQuery = async (
 
     // ── Gemini API 호출 (복잡한 명령) ──
     const hasContext = columns.length > 0;
-    const systemPrompt = `당신은 EasyXL.GG의 AI 엑셀 에이전트입니다.
+    const systemPrompt = `당신은 EasyXL.GG의 AI 엑셀 에이전트입니다. "Multi-Sheet IQ" 기능이 활성화되어 여러 시트를 동시에 분석할 수 있습니다.
 사용자의 자연어 쿼리를 분석하여 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요.
 
 응답 JSON 형식:
 {
-  "intent": "calculation" | "filtering" | "generation" | "update" | "chart",
+  "intent": "calculation" | "filtering" | "generation" | "update" | "chart" | "join",
   "explanation": "한국어 설명",
   "formula": "엑셀 수식 (선택)",
   "operation": "sum" | "count" | "average" | "max" | "min" | "none",
@@ -133,10 +147,12 @@ export const processNaturalLanguageQuery = async (
   "updates": [{"row": 숫자, "col": 숫자, "value": 값}],
   "unit": "단위",
   "calculatedValue": 숫자,
-  "chartConfig": {"chartType": "bar|pie|line|area", "xAxis": "X축 열이름", "yAxis": "Y축 열이름", "title": "차트 제목"}
+  "chartConfig": {"chartType": "bar|pie|line|area", "xAxis": "X축 열이름", "yAxis": "Y축 열이름", "title": "차트 제목"},
+  "joinConfig": { "sourceSheetId": "ID", "targetSheetId": "ID", "sourceKey": "열이름", "targetKey": "열이름", "columnsToCopy": ["열이름"] }
 }
 
 규칙:
+- 멀티 시트 작업(VLOOKUP, 데이터 병합) 요청 → intent: "join", joinConfig 명시
 - 데이터 생성 요청 (예: "~ 데이터를 만들어줘", "~ 매장 리스트 생성") → intent: "generation"
   - ${hasContext ? '기존 데이터의 열 구조를 따르거나 필요시 새 구조를 만드세요.' : '새로운 데이터 구조(열 이름들)를 정의하고 데이터를 생성하세요.'}
   - generatedData 배열에 객체들을 5개 이상(명시적 요청 없으면) 포함시키세요.
@@ -147,8 +163,11 @@ export const processNaturalLanguageQuery = async (
 - 계산 요청 → intent: "calculation", operation/targetColumn 설정
 - 수정 요청 → intent: "update", updates 배열 설정
 
+현재 로드된 전체 시트 정보:
+${allSheets && allSheets.length > 0 ? allSheets.map(s => `- ID: ${s.id}, 시트명: ${s.name}, 열: [${s.columns.join(', ')}]`).join('\n') : '- 없음'}
+
 데이터 컨텍스트:
-${hasContext ? `- 열 목록: ${columns.join(', ')}
+${hasContext ? `- 활성 시트 열 목록: ${columns.join(', ')}
 - 전체 행 수: ${fullData.length}
 - 데이터 샘플(첫 3행): ${JSON.stringify(fullData.slice(0, 3))}
 ${selection?.rangeCoords ? `- 선택 범위: Row ${selection.rangeCoords.startRow + 1}~${selection.rangeCoords.endRow + 1}` : ''}

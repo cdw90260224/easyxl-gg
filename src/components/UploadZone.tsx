@@ -8,6 +8,7 @@ export default function UploadZone({ onDataLoaded }: { onDataLoaded: (data: any[
 
     const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
+        e.stopPropagation();
         setIsDragging(false);
 
         const file = e.dataTransfer.files[0];
@@ -72,8 +73,8 @@ export default function UploadZone({ onDataLoaded }: { onDataLoaded: (data: any[
     return (
         <div className="flex-1 flex flex-col items-center justify-center min-h-[35vh] animate-in fade-in zoom-in-95 duration-500">
             <div
-                onDragOver={(e) => { e.preventDefault(); setIsDragging(true); }}
-                onDragLeave={() => setIsDragging(false)}
+                onDragOver={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(true); }}
+                onDragLeave={(e) => { e.preventDefault(); e.stopPropagation(); setIsDragging(false); }}
                 onDrop={handleDrop}
                 className={`w-full max-w-2xl p-12 rounded-[2rem] border transition-all duration-300 text-center flex flex-col items-center gap-6 shadow-premium dark:shadow-premium-dark
           ${isDragging
