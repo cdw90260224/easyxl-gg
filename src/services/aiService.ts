@@ -2,7 +2,7 @@ import axios from 'axios';
 
 const getGeminiConfig = (model: 'flash' | 'flash-lite' = 'flash') => {
     const key = import.meta.env.VITE_GEMINI_API_KEY;
-    const modelName = model === 'flash-lite' ? 'gemini-2.0-flash-lite-preview-02-05' : 'gemini-2.0-flash';
+    const modelName = model === 'flash-lite' ? 'gemini-2.0-flash-lite-preview-02-05' : 'gemini-2.0-flash-exp';
     console.log(`[DEBUG] Gemini Config - Model: ${modelName}`);
     return {
         key,
