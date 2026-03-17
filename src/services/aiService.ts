@@ -1,16 +1,12 @@
 import axios from 'axios';
 
-const getGeminiConfig = () => {
+const getGeminiConfig = (model: 'flash' | 'flash-lite' = 'flash') => {
     const key = import.meta.env.VITE_GEMINI_API_KEY;
-    console.log('[DEBUG] Gemini Config:', {
-        hasKey: !!key,
-        keyLength: key?.length,
-        keyStart: key?.substring(0, 4)
-    });
-    // 새 프로젝트의 키이므로 최신 모델인 gemini-2.0-flash를 사용
+    const modelName = model === 'flash-lite' ? 'gemini-2.0-flash-lite-preview-02-05' : 'gemini-2.0-flash';
+    console.log(`[DEBUG] Gemini Config - Model: ${modelName}`);
     return {
         key,
-        url: `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${key}`
+        url: `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`
     };
 };
 
@@ -68,7 +64,19 @@ export const processNaturalLanguageQuery = async (
     allSheets?: SheetContext[]
 ): Promise<AIAnalysisResult> => {
 
-    const { key: GEMINI_API_KEY, url: GEMINI_API_URL } = getGeminiConfig();
+    // ── 휴리스틱 라우터 (모델 선택) ──
+    // 복잡한 작업(조인, 생성, 차트) 키워드 
+    const lq = query.toLowerCase();
+    const isComplexQuery = 
+        lq.includes('합쳐줘') || lq.includes('병합해') || lq.includes('vlookup') || lq.includes('조인') || lq.includes('참조') ||
+        lq.includes('차트') || lq.includes('그려줘') || lq.includes('시각화') || lq.includes('그래프') ||
+        lq.includes('만들어줘') || lq.includes('생성해') || lq.includes('데이터 생성');
+    
+    // 단순 작업은 매우 빠른 flash-lite로, 복잡한 추론은 flash 모델로 배차
+    const selectedModel = isComplexQuery ? 'flash' : 'flash-lite';
+    
+    const { key: GEMINI_API_KEY, url: GEMINI_API_URL } = getGeminiConfig(selectedModel);
+    console.log(`[AI Router] 🚀 Selected Model: ${selectedModel.toUpperCase()} for query: "${query}"`);
 
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here' || GEMINI_API_KEY === '') {
         console.error('[CRITICAL] Gemini API Key is missing or default. Please check your .env file.');
@@ -130,7 +138,13 @@ export const processNaturalLanguageQuery = async (
 
     // ── Gemini API 호출 (복잡한 명령) ──
     const hasContext = columns.length > 0;
-    const systemPrompt = `당신은 EasyXL.GG의 AI 엑셀 에이전트입니다. "Multi-Sheet IQ" 기능이 활성화되어 여러 시트를 동시에 분석할 수 있습니다.
+    
+    // 모델별 특화 프롬프트
+    const agentRole = selectedModel === 'flash' 
+        ? '수석 엑셀 AI 및 데이터 사이언티스트로서, 여러 시트 간의 연관성을 파악하거나, 새로운 데이터를 창의적이고 일관성 있게 생성하며, 데이터의 특징을 파악하여 최적의 차트를 기획하세요.' 
+        : '초고속 데이터 제어 에이전트로서, 필터링, 사칙연산, 데이터 업데이트 등 단일 시트 내의 구체적인 작업을 명확하고 빠르게 처리하세요.';
+
+    const systemPrompt = `당신은 EasyXL.GG의 ${agentRole} "Multi-Sheet IQ" 기능이 활성화되어 여러 시트를 동시에 분석할 수 있습니다.
 사용자의 자연어 쿼리를 분석하여 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요.
 
 응답 JSON 형식:
