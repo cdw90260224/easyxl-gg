@@ -2,8 +2,8 @@ import axios from 'axios';
 
 const getGeminiConfig = (model: 'flash' | 'flash-lite' = 'flash') => {
     const key = import.meta.env.VITE_GEMINI_API_KEY;
-    const modelName = model === 'flash-lite' ? 'gemini-2.0-flash-lite-preview-02-05' : 'gemini-2.0-flash-exp';
-    console.log(`[DEBUG] Gemini Config - Model: ${modelName}`);
+    const modelName = model === 'flash-lite' ? 'gemini-2.5-flash-lite' : 'gemini-2.5-flash';
+    console.log(`[DEBUG] Gemini Config - API Version: v1beta, Switch Model: ${modelName}`);
     return {
         key,
         url: `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${key}`
@@ -76,7 +76,7 @@ export const processNaturalLanguageQuery = async (
     const selectedModel = isComplexQuery ? 'flash' : 'flash-lite';
     
     const { key: GEMINI_API_KEY, url: GEMINI_API_URL } = getGeminiConfig(selectedModel);
-    console.log(`[AI Router] 🚀 Selected Model: ${selectedModel.toUpperCase()} for query: "${query}"`);
+    console.log(`[AI Router] 🚀 Selected Gemini 2.5 Model: ${selectedModel.toUpperCase()} for query: "${query}"`);
 
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here' || GEMINI_API_KEY === '') {
         console.error('[CRITICAL] Gemini API Key is missing or default. Please check your .env file.');
