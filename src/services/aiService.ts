@@ -1,5 +1,7 @@
 import axios from 'axios';
 
+console.log("%c[SYSTEM] Gemini 2.5 Logic - ACTIVE", "color: #10b981; font-weight: bold; font-size: 14px;");
+
 const getGeminiConfig = (model: 'flash' | 'flash-lite' = 'flash') => {
     const key = import.meta.env.VITE_GEMINI_API_KEY;
     const modelName = model === 'flash-lite' ? 'gemini-2.5-flash-lite' : 'gemini-2.5-flash';
@@ -28,7 +30,7 @@ export interface ChartConfig {
 }
 
 export interface AIAnalysisResult {
-    intent: 'calculation' | 'filtering' | 'generation' | 'update' | 'chart' | 'join';
+    intent: 'calculation' | 'filtering' | 'generation' | 'update' | 'chart' | 'join' | 'sort' | 'error';
     explanation: string;
     formula?: string;
     operation?: 'sum' | 'count' | 'average' | 'max' | 'min' | 'none';
@@ -48,12 +50,17 @@ export interface AIAnalysisResult {
         targetKey: string;
         columnsToCopy: string[];
     };
+    sortConfig?: {
+        column: string;
+        direction: 'asc' | 'desc';
+    };
 }
 
 export interface SheetContext {
     id: string;
     name: string;
     columns: string[];
+    dataSample?: any[];
 }
 
 export const processNaturalLanguageQuery = async (
@@ -162,7 +169,8 @@ export const processNaturalLanguageQuery = async (
   "unit": "단위",
   "calculatedValue": 숫자,
   "chartConfig": {"chartType": "bar|pie|line|area", "xAxis": "X축 열이름", "yAxis": "Y축 열이름", "title": "차트 제목"},
-  "joinConfig": { "sourceSheetId": "ID", "targetSheetId": "ID", "sourceKey": "열이름", "targetKey": "열이름", "columnsToCopy": ["열이름"] }
+  "joinConfig": { "sourceSheetId": "ID", "targetSheetId": "ID", "sourceKey": "열이름", "targetKey": "열이름", "columnsToCopy": ["열이름"] },
+  "sortConfig": { "column": "열이름", "direction": "asc" | "desc" }
 }
 
 규칙:
@@ -174,11 +182,12 @@ export const processNaturalLanguageQuery = async (
   - chartConfig에 chartType(bar/pie/line/area), xAxis(카테고리 열), yAxis(수치 열), title 설정
   - xAxis와 yAxis는 반드시 현재 데이터의 열 이름 중에서 선택하세요.
 - 필터링 요청 → intent: "filtering", filterColumn/filterValue/filterOperator 설정
+- 정렬 요청 (예: "~순으로 정렬해줘", "내림차순 정렬") → intent: "sort", sortConfig 설정
 - 계산 요청 → intent: "calculation", operation/targetColumn 설정
 - 수정 요청 → intent: "update", updates 배열 설정
 
-현재 로드된 전체 시트 정보:
-${allSheets && allSheets.length > 0 ? allSheets.map(s => `- ID: ${s.id}, 시트명: ${s.name}, 열: [${s.columns.join(', ')}]`).join('\n') : '- 없음'}
+현재 로드된 전체 시트 정보 (이름, 열, 데이터 샘플):
+${allSheets && allSheets.length > 0 ? allSheets.map(s => `- ID: ${s.id}, 시트명: ${s.name}, 열: [${s.columns.join(', ')}], 샘플: ${JSON.stringify(s.dataSample || [])}`).join('\n') : '- 없음'}
 
 데이터 컨텍스트:
 ${hasContext ? `- 활성 시트 열 목록: ${columns.join(', ')}

@@ -2,13 +2,13 @@ import { useState, useCallback } from 'react';
 import { UploadCloud } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
+import { parseExcelWorkbook, type ParsedSheet } from '../utils/excelParser';
 
-export default function UploadZone({ onDataLoaded }: { onDataLoaded: (data: any[]) => void }) {
+export default function UploadZone({ onSheetsLoaded }: { onSheetsLoaded: (sheets: ParsedSheet[]) => void }) {
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
-        e.stopPropagation();
         setIsDragging(false);
 
         const file = e.dataTransfer.files[0];
@@ -25,40 +25,13 @@ export default function UploadZone({ onDataLoaded }: { onDataLoaded: (data: any[
         reader.onload = (e) => {
             try {
                 const data = new Uint8Array(e.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(data, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const worksheet = workbook.Sheets[firstSheetName];
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                
+                const sheets = parseExcelWorkbook(workbook);
 
-                // Get raw 2D array to identify title vs header
-                const rawRows: any[][] = XLSX.utils.sheet_to_json(worksheet, { header: 1, defval: "" });
-
-                // Find the first row that looks like a header (multiple columns filled)
-                let headerRowIndex = 0;
-                for (let i = 0; i < rawRows.length; i++) {
-                    const filledCols = rawRows[i].filter(cell => String(cell).trim() !== "").length;
-                    if (filledCols >= 2) { // Heuristic: headers usually have at least 2 non-empty columns
-                        headerRowIndex = i;
-                        break;
-                    }
-                }
-
-                const headers = rawRows[headerRowIndex].map(h => String(h).trim());
-                const dataRows = rawRows.slice(headerRowIndex + 1);
-
-                // Convert back to objects using found headers
-                const jsonData = dataRows
-                    .filter(row => row.some(cell => String(cell).trim() !== "")) // Skip empty rows
-                    .map(row => {
-                        const obj: any = {};
-                        headers.forEach((h, idx) => {
-                            if (h) obj[h] = row[idx] === undefined ? "" : row[idx];
-                        });
-                        return obj;
-                    });
-
-                if (jsonData.length > 0) {
-                    onDataLoaded(jsonData);
-                    toast.success(`파일 로드 완료: 총 ${jsonData.length.toLocaleString()}개의 행과 ${headers.filter(h => h).length}개의 카테고리(열)를 인식했습니다.`);
+                if (sheets.length > 0) {
+                    onSheetsLoaded(sheets);
+                    toast.success(`파일 로드 완료: 총 ${sheets.length}개의 시트를 인식했습니다.`);
                 } else {
                     toast.error("엑셀 파일이 비어있거나 읽을 수 없습니다.");
                 }

@@ -12,6 +12,7 @@ import * as XLSX from 'xlsx';
 import { processNaturalLanguageQuery, type AIAnalysisResult, type SelectionContext, type ChartConfig } from './services/aiService';
 import { saveSheet, listSheets, getSheet, deleteSheet, type SheetRecord } from './services/sheetService';
 import SheetTabs from './components/SheetTabs';
+import { parseExcelWorkbook } from './utils/excelParser';
 
 export default function App() {
     const [data, setData] = useState<any[]>([]);
@@ -60,41 +61,33 @@ export default function App() {
         else document.documentElement.classList.remove('dark');
     }, [isDark]);
 
-    const handleDataLoaded = (d: any[]) => {
-        const columns = d.length > 0 ? Object.keys(d[0]).filter(k => k !== '_id') : [];
-        const dataWithIds = d.map((row, idx) => ({ ...row, _id: row._id || `row_${idx}_${Date.now()}` }));
-        
-        let newActiveIndex = activeSheetIndex;
-        
+    const handleMultiSheetsLoaded = (newSheets: any[]) => {
         setSheets(prev => {
-            const arr = [...prev];
-            const currentSheet = arr[activeSheetIndex];
-            
-            // 만약 현재 시트가 완전히 비어있다면 해당 시트 덮어쓰기, 아니면 새 시트로 추가
+            // Append new sheets, but if the current active sheet is empty, replace it
+            const currentSheet = prev[activeSheetIndex];
             if (currentSheet && (!currentSheet.data || currentSheet.data.length === 0)) {
-                arr[activeSheetIndex] = { ...currentSheet, data: dataWithIds, columns };
-                newActiveIndex = activeSheetIndex;
-            } else {
-                arr.push({ id: `sheet_${Date.now()}`, name: `Sheet ${arr.length + 1}`, data: dataWithIds, columns });
-                newActiveIndex = arr.length - 1;
+                const arr = [...prev];
+                arr.splice(activeSheetIndex, 1, ...newSheets);
+                return arr;
             }
-            return arr;
+            return [...prev, ...newSheets];
         });
 
-        if (newActiveIndex !== activeSheetIndex) {
-            setActiveSheetIndex(newActiveIndex);
-        }
-
-        setData(dataWithIds);
-        setFilteredData(dataWithIds);
+        // Set the first of the new sheets as active
+        const newIndex = sheets.length; 
+        setActiveSheetIndex(newIndex);
+        setData(newSheets[0].data);
+        setFilteredData(newSheets[0].data);
         setAnalysis(null);
         setSelectedRange(null);
-        toast.success(`✅ 데이터 로드 완료!`);
+        toast.success(`✅ ${newSheets.length}개의 시트 로드 완료!`);
     };
 
     const handleSearch = async (query: string) => {
-        if (!query) { setFilteredData(data); setAnalysis(null); return; }
+        if (!query) { setFilteredData(data); setAnalysis(null); setChartConfig(null); return; }
         setIsLoading(true);
+        setAnalysis(null);
+        setChartConfig(null);
         try {
             const columns = data.length > 0 ? Object.keys(data[0]) : [];
             let selectionContext: SelectionContext | undefined;
@@ -110,7 +103,12 @@ export default function App() {
                 }
                 selectionContext = { selectedData, rangeCoords: selectedRange };
             }
-            const sheetContexts = sheets.map(s => ({ id: s.id, name: s.name, columns: s.columns }));
+            const sheetContexts = sheets.map(s => ({ 
+                id: s.id, 
+                name: s.name, 
+                columns: s.columns,
+                dataSample: s.data.slice(0, 3) // Pass first 3 rows as sample
+            }));
             const result = await processNaturalLanguageQuery(query, columns, data, selectionContext, sheetContexts);
             setAnalysis(result);
             setChartConfig(null); // 새 분석 시 이전 차트 초기화
@@ -120,6 +118,13 @@ export default function App() {
                     _id: `gen_${idx}_${Date.now()}`
                 }));
                 setData(dataWithIds); setFilteredData(dataWithIds);
+                setSheets(prev => {
+                    const arr = [...prev];
+                    const cols = Object.keys(result.generatedData![0] || {}).filter(k => k !== '_id');
+                    arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: dataWithIds, columns: cols };
+                    return arr;
+                });
+                setActiveTab('edit'); // 데이터 생성 시 그리드 뷰로 자동 전환
                 toast.success(`✨ ${result.generatedData.length}행의 데이터를 AI가 생성했습니다.`);
             } else if (result.intent === 'chart' && result.chartConfig) {
                 setChartConfig(result.chartConfig);
@@ -168,6 +173,11 @@ export default function App() {
                     return updated;
                 });
                 setData(newData); setFilteredData(newData);
+                setSheets(prev => {
+                    const arr = [...prev];
+                    arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: newData };
+                    return arr;
+                });
                 toast.success('선택 영역이 업데이트되었습니다.');
             } else if (result.intent === 'filtering') {
                 const { filterColumn, filterValue, filterOperator } = result;
@@ -194,10 +204,42 @@ export default function App() {
                 filtered.length === 0
                     ? toast.info('검색 결과가 없습니다.')
                     : toast.success(`${filtered.length}건 필터링되었습니다.`);
+            } else if (result.intent === 'sort' && result.sortConfig) {
+                const { column, direction } = result.sortConfig;
+                if (columns.includes(column)) {
+                    const sorted = [...data].sort((a, b) => {
+                        const valA = String(a[column] ?? '').replace(/,/g, '');
+                        const valB = String(b[column] ?? '').replace(/,/g, '');
+                        const numA = parseFloat(valA);
+                        const numB = parseFloat(valB);
+                        
+                        if (!isNaN(numA) && !isNaN(numB)) {
+                            return direction === 'asc' ? numA - numB : numB - numA;
+                        }
+                        return direction === 'asc' 
+                            ? String(valA).localeCompare(String(valB))
+                            : String(valB).localeCompare(String(valA));
+                    });
+                    
+                    setData(sorted);
+                    setFilteredData(sorted);
+                    setSheets(prev => {
+                        const arr = [...prev];
+                        arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: sorted };
+                        return arr;
+                    });
+                    toast.success(`✨ ${column} 기준 ${direction === 'asc' ? '오름차순' : '내림차순'} 정렬 완료`);
+                }
             } else if (result.intent === 'calculation') {
                 toast.success('분석이 완료되었습니다.');
             }
         } catch (err: any) {
+            console.error('[AI Error]', err);
+            setAnalysis({
+                intent: 'error',
+                explanation: '분석 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.',
+            });
+            toast.error('❌ 정렬 또는 분석 중 오류가 발생했습니다.');
             // 에러 종류 별로 구체적인 메시지 표시
             if (err?.message?.includes('VITE_GEMINI_API_KEY')) {
                 toast.error('❌ API 키 미설정: .env 파일에 VITE_GEMINI_API_KEY를 입력해주세요.');
@@ -219,27 +261,39 @@ export default function App() {
 
     const handleExport = () => {
         try {
-            if (filteredData.length === 0) { toast.warning('내보낼 데이터가 없습니다.'); return; }
-            const exportData = filteredData.map(row => {
-                const { _id, ...cleanRow } = row; // _id는 제외하고 내보냄
-                const newRow: any = { ...cleanRow };
-                if (isPrivacyMode) {
-                    Object.keys(newRow).forEach(key => {
-                        const lc = key.toLowerCase();
-                        if (lc.includes('이름') || lc.includes('name') || lc.includes('담당자')) newRow[key] = '[NAME_HIDDEN]';
-                        else if (lc.includes('연락처') || lc.includes('phone') || lc.includes('전화')) newRow[key] = '[PHONE_HIDDEN]';
-                        else if (lc.includes('email') || lc.includes('이메일')) newRow[key] = '[EMAIL_HIDDEN]';
-                        else if (lc.includes('주소') || lc.includes('address')) newRow[key] = '[ADDRESS_HIDDEN]';
-                    });
-                }
-                return newRow;
+            if (data.length === 0) { toast.warning('내보낼 데이터가 없습니다.'); return; }
+            
+            // WYSIWYG: filteredData 대신 전체 data를 사용하며, [HIDDEN] 처리 없이 원본 그대로 내보냄
+            const exportData = data.map(row => {
+                const { _id, ...cleanRow } = row;
+                return cleanRow;
             });
-            const ws = XLSX.utils.json_to_sheet(exportData);
+
+            const keys = Object.keys(exportData[0] || {});
+            const isAutoGeneratedHeader = keys.length > 0 && keys.every(k => k.match(/^[A-Z]$/));
+            
+            const ws = XLSX.utils.json_to_sheet(exportData, { skipHeader: isAutoGeneratedHeader });
+
+            // Autofit: 각 열의 최대 길이를 계산하여 너비 조정
+            const colWidths = keys.map(key => {
+                const headerLen = key.toString().length;
+                const maxDataLen = exportData.reduce((max, row) => {
+                    const cellLen = row[key] ? row[key].toString().length : 0;
+                    return Math.max(max, cellLen);
+                }, 0);
+                return { wch: Math.max(headerLen, maxDataLen) + 2 }; // 여유 공간 +2
+            });
+            ws['!cols'] = colWidths;
+
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Sheet1');
             XLSX.writeFile(wb, 'easyxl_export.xlsx');
-            toast.success('엑셀 파일로 내보냈습니다!');
-        } catch { toast.error('내보내기 중 오류가 발생했습니다.'); }
+            
+            toast.success('엑셀 파일로 내보냈습니다! (전체 데이터 포함)');
+        } catch (err) { 
+            console.error('Export error:', err);
+            toast.error('내보내기 중 오류가 발생했습니다.'); 
+        }
     };
 
     const handleSaveToDb = async () => {
@@ -350,24 +404,11 @@ export default function App() {
         reader.onload = (evt) => {
             try {
                 const buffer = new Uint8Array(evt.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(buffer, { type: 'array' });
-                const firstSheetName = workbook.SheetNames[0];
-                const rawRows: any[][] = XLSX.utils.sheet_to_json(workbook.Sheets[firstSheetName], { header: 1, defval: "" });
+                const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
                 
-                let headerIdx = 0;
-                for (let i = 0; i < rawRows.length; i++) {
-                    if (rawRows[i].filter(cell => String(cell).trim() !== "").length >= 2) { headerIdx = i; break; }
-                }
-                const headers = rawRows[headerIdx].map(h => String(h).trim());
-                const jsonData = rawRows.slice(headerIdx + 1)
-                    .filter(row => row.some(cell => String(cell).trim() !== ""))
-                    .map(row => {
-                        const obj: any = {};
-                        headers.forEach((h, idx) => { if (h) obj[h] = row[idx] === undefined ? "" : row[idx]; });
-                        return obj;
-                    });
+                const newSheets = parseExcelWorkbook(workbook);
                 
-                if (jsonData.length > 0) handleDataLoaded(jsonData);
+                if (newSheets.length > 0) handleMultiSheetsLoaded(newSheets);
                 else toast.error("엑셀 파일이 비어있습니다.");
             } catch (err) { toast.error("파일 처리 오류"); }
         };
@@ -472,8 +513,21 @@ export default function App() {
                             sheets={sheets} 
                             activeSheetIndex={activeSheetIndex} 
                             onSelect={(i) => {
-                                setSheets(prev => { const arr = [...prev]; if(arr[activeSheetIndex]) arr[activeSheetIndex].data = data; return arr; });
-                                setActiveSheetIndex(i); setData(sheets[i].data); setFilteredData(sheets[i].data); setAnalysis(null); setChartConfig(null); setSelectedRange(null);
+                                // 1. 즉각적인 데이터 반영 (0.1초 미만)
+                                setSheets(prev => { 
+                                    const arr = [...prev]; 
+                                    if(arr[activeSheetIndex]) arr[activeSheetIndex].data = data; 
+                                    return arr; 
+                                });
+                                setActiveSheetIndex(i); 
+                                setData(sheets[i].data); 
+                                setFilteredData(sheets[i].data);
+                                
+                                // 2. AI 브레인 동기화 알림
+                                setAnalysis(null); 
+                                setChartConfig(null); 
+                                setSelectedRange(null);
+                                toast.info(`🤖 AI 브레인이 '${sheets[i].name}' 시트로 이동했습니다.`, { icon: '🧠' });
                             }} 
                             onDelete={handleDeleteSheet} 
                             onAdd={() => {
@@ -494,7 +548,7 @@ export default function App() {
                 {/* ── 업로드존: '수정' 모드이면서 데이터가 없을 때만 표시 ── */}
                 {activeTab === 'edit' && !hasData && (
                     <div className="w-full max-w-3xl animate-in fade-in zoom-in-95 duration-500">
-                        <UploadZone onDataLoaded={handleDataLoaded} />
+                        <UploadZone onSheetsLoaded={handleMultiSheetsLoaded} />
                     </div>
                 )}
 
@@ -558,7 +612,11 @@ export default function App() {
                                         </span>
                                     )}
                                 </div>
-                                <div className="flex items-center gap-2">
+                                <div className="flex items-center gap-3">
+                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg text-[10px] text-amber-700 dark:text-amber-400 font-medium animate-in fade-in slide-in-from-right-2 duration-700">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
+                                        내보내기 시 원본 데이터가 모두 포함됩니다
+                                    </div>
                                     {filteredData.length < data.length && (
                                         <button
                                             onClick={() => { setFilteredData(data); setAnalysis(null); toast.info('필터가 해제되었습니다.'); }}
@@ -594,8 +652,8 @@ export default function App() {
 
                             <InteractiveGrid
                                 data={filteredData}
-                                onSelection={(r, c, r2, c2) => setSelectedRange({ startRow: r, startCol: c, endRow: r2, endCol: c2 })}
-                                onDataChange={(updatedFilteredData) => {
+                                onSelectionChange={(r: number, c: number, r2: number, c2: number) => setSelectedRange({ startRow: r, startCol: c, endRow: r2, endCol: c2 })}
+                                onDataChange={(updatedFilteredData: any[]) => {
                                     // 필터링된 데이터의 변경사항을 원본 데이터(data)에 병합
                                     const newData = data.map(originalRow => {
                                         const found = updatedFilteredData.find(u => u._id === originalRow._id);

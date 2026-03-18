@@ -28,8 +28,9 @@ export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivac
                     <div className="p-2 bg-deepblue-500/10 rounded-xl group-hover:bg-deepblue-500/20 transition-colors">
                         <FileSpreadsheet className="w-6 h-6 text-deepblue-600" />
                     </div>
-                    <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100">
+                    <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2">
                         EasyXL<span className="text-deepblue-600">.GG</span>
+                        <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">PATCH v1.6.8</span>
                     </h1>
                 </div>
 

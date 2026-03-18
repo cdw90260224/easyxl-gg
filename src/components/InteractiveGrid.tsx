@@ -2,19 +2,31 @@ import { useState, useCallback, useRef } from 'react';
 
 interface InteractiveGridProps {
     data: any[];
-    onSelection?: (startRow: number, startCol: number, endRow: number, endCol: number) => void;
+    onSelectionChange?: (startRow: number, startCol: number, endRow: number, endCol: number) => void;
     onDataChange?: (newData: any[]) => void;
 }
 
 interface CellPos { row: number; col: number; }
 
-export default function InteractiveGrid({ data, onSelection, onDataChange }: InteractiveGridProps) {
+export default function InteractiveGrid({ data, onSelectionChange, onDataChange }: InteractiveGridProps) {
     const [editingCell, setEditingCell] = useState<CellPos | null>(null);
     const [editValue, setEditValue] = useState('');
     const [selStart, setSelStart] = useState<CellPos | null>(null);
     const [selEnd, setSelEnd] = useState<CellPos | null>(null);
     const [isDragging, setIsDragging] = useState(false);
+    const [expandedCells, setExpandedCells] = useState<Set<string>>(new Set());
     const inputRef = useRef<HTMLInputElement>(null);
+
+    const toggleExpand = (row: number, col: number, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const key = `${row}-${col}`;
+        setExpandedCells(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key);
+            else next.add(key);
+            return next;
+        });
+    };
 
     if (!data || data.length === 0) {
         return (
@@ -57,7 +69,7 @@ export default function InteractiveGrid({ data, onSelection, onDataChange }: Int
         const maxR = Math.max(start.row, row);
         const minC = Math.min(start.col, col);
         const maxC = Math.max(start.col, col);
-        onSelection?.(minR, minC, maxR, maxC);
+        onSelectionChange?.(minR, minC, maxR, maxC);
     };
 
     const handleDoubleClick = (row: number, col: number) => {
@@ -104,11 +116,11 @@ export default function InteractiveGrid({ data, onSelection, onDataChange }: Int
                         {headers.map((h, ci) => (
                             <th
                                 key={ci}
-                                className="sticky top-0 z-20 bg-gray-100 dark:bg-[#262626] border border-gray-300 dark:border-gray-700 px-3 py-1.5 text-left text-xs font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap"
-                                style={{ minWidth: '120px' }}
+                                className={`sticky top-0 z-20 bg-gray-100 dark:bg-[#262626] border border-gray-300 dark:border-gray-700 px-3 py-1 text-left text-xs font-bold text-gray-500 dark:text-gray-400 whitespace-nowrap`}
+                                style={{ minWidth: '150px' }}
                             >
-                                <div className="flex flex-col gap-0.5">
-                                    <span className="text-[10px] text-gray-400 font-mono">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-[9px] opacity-50 font-mono">
                                         {String.fromCharCode(65 + ci)}
                                     </span>
                                     <span>{h}</span>
@@ -128,13 +140,22 @@ export default function InteractiveGrid({ data, onSelection, onDataChange }: Int
                                 const selected = isSelected(ri, ci);
                                 const editing = editingCell?.row === ri && editingCell?.col === ci;
                                 const val = row[h];
+                                const cellValue = String(val ?? '');
+                                
+                                // Dynamic Analysis
+                                const isNumeric = /^-?\d+(\.\d+)?%?$/.test(cellValue.trim());
+                                const isPositive = cellValue.includes('+') || (isNumeric && parseFloat(cellValue) > 0 && cellValue.includes('%'));
+                                const isNegative = cellValue.includes('-') && (isNumeric || cellValue.includes('%'));
+                                const isSectionHeader = cellValue.includes('전월대비') || cellValue.includes('일별') || cellValue.includes('성과');
+
                                 return (
                                     <td
                                         key={ci}
-                                        className={`border border-gray-100 dark:border-gray-800 relative cursor-cell transition-colors ${selected
-                                                ? 'bg-deepblue-50 dark:bg-deepblue-500/20 ring-1 ring-inset ring-deepblue-500/30'
-                                                : 'bg-white dark:bg-[#1a1a1a] hover:bg-gray-50/80 dark:hover:bg-gray-900/50'
-                                            }`}
+                                        className={`border border-gray-100 dark:border-gray-800 relative cursor-cell transition-colors
+                                            ${selected ? 'bg-deepblue-50 dark:bg-deepblue-500/10 ring-1 ring-inset ring-deepblue-500/30' : 'bg-white dark:bg-[#1a1a1a] hover:bg-gray-50/80 dark:hover:bg-gray-900/50'}
+                                            ${isSectionHeader ? 'bg-indigo-50/20 dark:bg-indigo-500/5 font-bold border-t-2 border-t-indigo-100 dark:border-t-indigo-900/40' : ''}
+                                            text-left
+                                        `}
                                         onMouseDown={() => handleMouseDown(ri, ci)}
                                         onMouseEnter={() => handleMouseEnter(ri, ci)}
                                         onMouseUp={() => handleMouseUp(ri, ci)}
@@ -147,12 +168,29 @@ export default function InteractiveGrid({ data, onSelection, onDataChange }: Int
                                                 onChange={e => setEditValue(e.target.value)}
                                                 onBlur={() => commitEdit({ row: ri, col: ci })}
                                                 onKeyDown={e => handleKeyDown(e, { row: ri, col: ci })}
-                                                className="absolute inset-0 w-full h-full px-2 py-1 z-10 outline-none border-2 border-deepblue-500 bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-gray-100 text-sm shadow-xl"
+                                                className="absolute inset-0 w-full h-full px-2 py-0 z-10 outline-none border-2 border-deepblue-500 bg-white dark:bg-[#1a1a1a] text-gray-900 dark:text-gray-100 text-sm shadow-xl"
                                             />
                                         ) : (
-                                            <span className="block px-3 py-2 text-gray-800 dark:text-gray-200 whitespace-nowrap overflow-hidden text-ellipsis max-w-[200px]">
-                                                {val !== null && val !== undefined ? String(val) : ''}
-                                            </span>
+                                            <div className="group/cell relative px-3 py-1">
+                                                <div 
+                                                    className={`text-gray-800 dark:text-gray-200 text-sm transition-all duration-300 ease-in-out whitespace-pre-wrap 
+                                                        ${expandedCells.has(`${ri}-${ci}`) ? '' : 'line-clamp-2'}
+                                                        ${isPositive ? 'text-red-500 font-semibold' : ''}
+                                                        ${isNegative ? 'text-blue-500 font-semibold' : ''}
+                                                    `}
+                                                    title={cellValue}
+                                                >
+                                                    {cellValue}
+                                                </div>
+                                                {cellValue.length > 40 && (
+                                                    <button
+                                                        onClick={(e) => toggleExpand(ri, ci, e)}
+                                                        className="mt-0.5 text-[9px] text-deepblue-600 dark:text-deepblue-400 font-bold opacity-0 group-hover/cell:opacity-100 transition-opacity bg-white/90 dark:bg-[#1a1a1a]/90 backdrop-blur-sm rounded px-1 shadow-sm border border-gray-100 dark:border-gray-800"
+                                                    >
+                                                        {expandedCells.has(`${ri}-${ci}`) ? '접기' : '더 보기'}
+                                                    </button>
+                                                )}
+                                            </div>
                                         )}
                                     </td>
                                 );

@@ -95,7 +95,7 @@ export default function AnalyticsDashboard({ data }: AnalyticsDashboardProps) {
                     </div>
                     <div>
                         <h3 className="font-extrabold text-gray-900 dark:text-gray-100 text-lg tracking-tight">AI Smart Insights</h3>
-                        <p className="text-sm text-gray-500 dark:text-gray-400">
+                        <p className="text-sm text-gray-500 dark:text-gray-400 line-clamp-1">
                             데이터 구조를 분석하여 <strong>[{categoricalKey}]</strong> 별 <strong>[{numericKey}]</strong> 통계를 자동 생성했습니다.
                         </p>
                     </div>
