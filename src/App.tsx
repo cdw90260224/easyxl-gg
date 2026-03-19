@@ -61,6 +61,12 @@ export default function App() {
         else document.documentElement.classList.remove('dark');
     }, [isDark]);
 
+    const handlePDFLoaded = (text: string) => {
+        toast.info("PDF 텍스트 추출 완료! AI가 데이터를 구조화합니다.", { icon: '📄' });
+        // Automatically trigger AI search with the PDF context
+        handleSearch(`다음 PDF 텍스트 내용을 바탕으로 핵심 데이터를 추출해서 표(Table) 형태로 만들어줘:\n\n${text}`);
+    };
+
     const handleMultiSheetsLoaded = (newSheets: any[]) => {
         setSheets(prev => {
             // Append new sheets, but if the current active sheet is empty, replace it
@@ -474,20 +480,42 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         setIsGlobalDragging(false);
-        if (activeTab !== 'edit') return;
         
-        const file = e.dataTransfer.files[0];
-        if (!file) return;
+        if (activeTab === 'edit') {
+            const file = e.dataTransfer.files[0];
+            if (file) handleExcelLoadedFromFile(file);
+        }
+    };
 
+    const handleFileSelected = (file: File) => {
+        if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+            handlePDFLoadedFromFile(file);
+        } else {
+            handleExcelLoadedFromFile(file);
+        }
+    };
+
+    const handlePDFLoadedFromFile = async (file: File) => {
+        try {
+            toast.loading('PDF에서 텍스트를 추출하는 중...');
+            const { extractTextFromPDF } = await import('./utils/pdfParser');
+            const text = await extractTextFromPDF(file);
+            handlePDFLoaded(text);
+            toast.dismiss();
+        } catch (err) {
+            toast.error("PDF 처리 중 오류가 발생했습니다.");
+            console.error(err);
+        }
+    };
+
+    const handleExcelLoadedFromFile = (file: File) => {
         const reader = new FileReader();
-        reader.onload = (evt) => {
+        reader.onload = (e) => {
             try {
-                const buffer = new Uint8Array(evt.target?.result as ArrayBuffer);
-                const workbook = XLSX.read(buffer, { type: 'array', cellDates: true });
-                
-                const newSheets = parseExcelWorkbook(workbook);
-                
-                if (newSheets.length > 0) handleMultiSheetsLoaded(newSheets);
+                const data = new Uint8Array(e.target?.result as ArrayBuffer);
+                const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+                const sheets = parseExcelWorkbook(workbook);
+                if (sheets.length > 0) handleMultiSheetsLoaded(sheets);
                 else toast.error("엑셀 파일이 비어있습니다.");
             } catch (err) { toast.error("파일 처리 오류"); }
         };
@@ -569,6 +597,7 @@ export default function App() {
                         onSearch={(q) => {
                             handleSearch(q);
                         }}
+                        onFileSelected={activeTab === 'create' ? handleFileSelected : undefined}
                     />
 
                     <div className="flex flex-wrap items-center justify-center gap-2">
@@ -627,7 +656,7 @@ export default function App() {
                 {/* ── 업로드존: '수정' 모드이면서 데이터가 없을 때만 표시 ── */}
                 {activeTab === 'edit' && !hasData && (
                     <div className="w-full max-w-3xl animate-in fade-in zoom-in-95 duration-500">
-                        <UploadZone onSheetsLoaded={handleMultiSheetsLoaded} />
+                        <UploadZone onSheetsLoaded={handleMultiSheetsLoaded} onPDFLoaded={handlePDFLoaded} />
                     </div>
                 )}
 

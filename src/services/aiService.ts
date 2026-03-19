@@ -72,18 +72,19 @@ export const processNaturalLanguageQuery = async (
 ): Promise<AIAnalysisResult> => {
 
     // ── 휴리스틱 라우터 (모델 선택) ──
-    // 복잡한 작업(조인, 생성, 차트) 키워드 
+    // 복잡한 작업(조인, 생성, 차트, PDF 추출) 키워드 
     const lq = query.toLowerCase();
     const isComplexQuery = 
         lq.includes('합쳐줘') || lq.includes('병합해') || lq.includes('vlookup') || lq.includes('조인') || lq.includes('참조') ||
         lq.includes('차트') || lq.includes('그려줘') || lq.includes('시각화') || lq.includes('그래프') ||
-        lq.includes('만들어줘') || lq.includes('생성해') || lq.includes('데이터 생성');
+        lq.includes('만들어줘') || lq.includes('생성해') || lq.includes('데이터 생성') ||
+        lq.includes('pdf') || lq.includes('추출');
     
     // 단순 작업은 매우 빠른 flash-lite로, 복잡한 추론은 flash 모델로 배차
     const selectedModel = isComplexQuery ? 'flash' : 'flash-lite';
     
     const { key: GEMINI_API_KEY, url: GEMINI_API_URL } = getGeminiConfig(selectedModel);
-    console.log(`[AI Router] 🚀 Selected Gemini 2.5 Model: ${selectedModel.toUpperCase()} for query: "${query}"`);
+    console.log(`[AI Router] 🚀 Selected Gemini 2.5 Model: ${selectedModel.toUpperCase()} for query: "${query.substring(0, 50)}..."`);
 
     if (!GEMINI_API_KEY || GEMINI_API_KEY === 'your_gemini_api_key_here' || GEMINI_API_KEY === '') {
         console.error('[CRITICAL] Gemini API Key is missing or default. Please check your .env file.');
@@ -148,10 +149,10 @@ export const processNaturalLanguageQuery = async (
     
     // 모델별 특화 프롬프트
     const agentRole = selectedModel === 'flash' 
-        ? '수석 엑셀 AI 및 데이터 사이언티스트로서, 여러 시트 간의 연관성을 파악하거나, 새로운 데이터를 창의적이고 일관성 있게 생성하며, 데이터의 특징을 파악하여 최적의 차트를 기획하세요.' 
+        ? '수석 엑셀 AI 및 데이터 사이언티스트로서, 여러 시트 간의 연관성을 파악하거나, 비정형 문서(PDF 등)에서 핵심 데이터를 추출하여 정형화된 표로 바꾸는 고도의 추론을 수행하세요.' 
         : '초고속 데이터 제어 에이전트로서, 필터링, 사칙연산, 데이터 업데이트 등 단일 시트 내의 구체적인 작업을 명확하고 빠르게 처리하세요.';
 
-    const systemPrompt = `당신은 EasyXL.GG의 ${agentRole} "Multi-Sheet IQ" 기능이 활성화되어 여러 시트를 동시에 분석할 수 있습니다.
+    const systemPrompt = `당신은 EasyXL.GG의 ${agentRole} "Document Intelligence" 기능이 활성화되어 PDF 등에서 데이터를 추출할 수 있습니다.
 사용자의 자연어 쿼리를 분석하여 반드시 아래 JSON 형식으로만 응답하세요. 다른 텍스트는 절대 포함하지 마세요.
 
 응답 JSON 형식:
@@ -174,19 +175,18 @@ export const processNaturalLanguageQuery = async (
 }
 
 규칙:
-- 멀티 시트 작업(VLOOKUP, 데이터 병합) 요청 → intent: "join", joinConfig 명시
-- 데이터 생성 요청 (예: "~ 데이터를 만들어줘", "~ 매장 리스트 생성") → intent: "generation"
+- 데이터 생성 또는 추출 요청 (예: "~ 데이터 추출", "~ 내용을 표로 만들어줘") → intent: "generation"
+  - PDF 텍스트가 제공된 경우, 해당 텍스트에서 가장 의미 있는 데이터들을 찾아내어 리스트(Array of Objects) 형태로 변환하세요.
   - ${hasContext ? '기존 데이터의 열 구조를 따르거나 필요시 새 구조를 만드세요.' : '새로운 데이터 구조(열 이름들)를 정의하고 데이터를 생성하세요.'}
-  - generatedData 배열에 객체들을 5개 이상(명시적 요청 없으면) 포함시키세요.
-- 차트/시각화 요청 (예: "~ 차트로 보여줘", "~ 그래프 그려줘", "시각화") → intent: "chart"
-  - chartConfig에 chartType(bar/pie/line/area), xAxis(카테고리 열), yAxis(수치 열), title 설정
-  - xAxis와 yAxis는 반드시 현재 데이터의 열 이름 중에서 선택하세요.
-- 필터링 요청 → intent: "filtering", filterColumn/filterValue/filterOperator 설정
-- 정렬 요청 (예: "~순으로 정렬해줘", "내림차순 정렬") → intent: "sort", sortConfig 설정
-- 계산 요청 → intent: "calculation", operation/targetColumn 설정
-- 수정 요청 → intent: "update", updates 배열 설정
+  - generatedData 배열에 가급적 풍부한 데이터를 포함시키세요.
+- 멀티 시트 작업(VLOOKUP, 데이터 병합) 요청 → intent: "join", joinConfig 명시
+- 차트/시각화 요청 → intent: "chart"
+- 필터링 요청 → intent: "filtering"
+- 정렬 요청 → intent: "sort"
+- 계산 요청 → intent: "calculation"
+- 수정 요청 → intent: "update"
 
-현재 로드된 전체 시트 정보 (이름, 열, 데이터 샘플):
+현재 로드된 전체 시트 정보:
 ${allSheets && allSheets.length > 0 ? allSheets.map(s => `- ID: ${s.id}, 시트명: ${s.name}, 열: [${s.columns.join(', ')}], 샘플: ${JSON.stringify(s.dataSample || [])}`).join('\n') : '- 없음'}
 
 데이터 컨텍스트:
@@ -194,7 +194,7 @@ ${hasContext ? `- 활성 시트 열 목록: ${columns.join(', ')}
 - 전체 행 수: ${fullData.length}
 - 데이터 샘플(첫 3행): ${JSON.stringify(fullData.slice(0, 3))}
 ${selection?.rangeCoords ? `- 선택 범위: Row ${selection.rangeCoords.startRow + 1}~${selection.rangeCoords.endRow + 1}` : ''}
-${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(selection.selectedData.slice(0, 5))}` : ''}` : '- 현재 로드된 데이터가 없습니다. 사용자의 요청에 기반하여 새로운 데이터를 생성하세요.'}`;
+${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(selection.selectedData.slice(0, 5))}` : ''}` : '- 현재 로드된 데이터가 없습니다. 사용자의 요청(PDF 텍스트 등)에 기반하여 새로운 데이터를 생성/추출하세요.'}`;
 
     // v1 API와의 호환성을 위해 system_instruction 대신 첫 번째 메시지에 지시사항을 통합
     const combinedPrompt = `${systemPrompt}\n\n사용자 쿼리: ${query}`;

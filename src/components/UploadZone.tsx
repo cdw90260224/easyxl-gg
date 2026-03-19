@@ -3,8 +3,14 @@ import { UploadCloud } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { parseExcelWorkbook, type ParsedSheet } from '../utils/excelParser';
+import { extractTextFromPDF } from '../utils/pdfParser';
 
-export default function UploadZone({ onSheetsLoaded }: { onSheetsLoaded: (sheets: ParsedSheet[]) => void }) {
+interface UploadZoneProps {
+    onSheetsLoaded: (sheets: ParsedSheet[]) => void;
+    onPDFLoaded: (text: string) => void;
+}
+
+export default function UploadZone({ onSheetsLoaded, onPDFLoaded }: UploadZoneProps) {
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -20,7 +26,20 @@ export default function UploadZone({ onSheetsLoaded }: { onSheetsLoaded: (sheets
         if (file) processFile(file);
     };
 
-    const processFile = (file: File) => {
+    const processFile = async (file: File) => {
+        if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
+            try {
+                toast.loading('PDF에서 텍스트를 추출하는 중...');
+                const text = await extractTextFromPDF(file);
+                onPDFLoaded(text);
+                toast.dismiss();
+            } catch (err) {
+                toast.error("PDF 처리 중 오류가 발생했습니다.");
+                console.error(err);
+            }
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
@@ -72,7 +91,7 @@ export default function UploadZone({ onSheetsLoaded }: { onSheetsLoaded: (sheets
                     <input
                         type="file"
                         className="hidden"
-                        accept=".xlsx,.xls,.csv"
+                        accept=".xlsx,.xls,.csv,.pdf"
                         onChange={handleFileInput}
                     />
                 </label>
