@@ -141,19 +141,27 @@ export default function InteractiveGrid({ data, onSelectionChange, onDataChange 
                                 const editing = editingCell?.row === ri && editingCell?.col === ci;
                                 const val = row[h];
                                 const cellValue = String(val ?? '');
-                                
                                 // Dynamic Analysis
                                 const isNumeric = /^-?\d+(\.\d+)?%?$/.test(cellValue.trim());
                                 const isPositive = cellValue.includes('+') || (isNumeric && parseFloat(cellValue) > 0 && cellValue.includes('%'));
                                 const isNegative = cellValue.includes('-') && (isNumeric || cellValue.includes('%'));
-                                const isSectionHeader = cellValue.includes('전월대비') || cellValue.includes('일별') || cellValue.includes('성과');
+
+                                 // Section Detection: Is this a divider row?
+                                 const hasOnlyOneValue = headers.filter(h => String(row[h] || '').trim() !== '').length === 1;
+                                 const isSectionHeader = hasOnlyOneValue || 
+                                                        cellValue.includes('전월대비') || 
+                                                        cellValue.includes('일별') || 
+                                                        cellValue.includes('성과') || 
+                                                        cellValue.includes('요약') || 
+                                                        cellValue.includes('제안') || 
+                                                        cellValue.includes('키워드');
 
                                 return (
                                     <td
                                         key={ci}
                                         className={`border border-gray-100 dark:border-gray-800 relative cursor-cell transition-colors
                                             ${selected ? 'bg-deepblue-50 dark:bg-deepblue-500/10 ring-1 ring-inset ring-deepblue-500/30' : 'bg-white dark:bg-[#1a1a1a] hover:bg-gray-50/80 dark:hover:bg-gray-900/50'}
-                                            ${isSectionHeader ? 'bg-indigo-50/20 dark:bg-indigo-500/5 font-bold border-t-2 border-t-indigo-100 dark:border-t-indigo-900/40' : ''}
+                                            ${isSectionHeader ? 'bg-slate-50 dark:bg-slate-900/40 font-bold border-t-2 border-t-slate-200 dark:border-t-slate-800' : ''}
                                             text-left
                                         `}
                                         onMouseDown={() => handleMouseDown(ri, ci)}
