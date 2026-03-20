@@ -8,9 +8,10 @@ import { extractTextFromPDF } from '../utils/pdfParser';
 interface UploadZoneProps {
     onSheetsLoaded: (sheets: ParsedSheet[]) => void;
     onPDFLoaded: (text: string) => void;
+    onImageLoaded: (base64: string, mimeType: string) => void;
 }
 
-export default function UploadZone({ onSheetsLoaded, onPDFLoaded }: UploadZoneProps) {
+export default function UploadZone({ onSheetsLoaded, onPDFLoaded, onImageLoaded }: UploadZoneProps) {
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
@@ -27,6 +28,24 @@ export default function UploadZone({ onSheetsLoaded, onPDFLoaded }: UploadZonePr
     };
 
     const processFile = async (file: File) => {
+        if (file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
+            try {
+                toast.loading('이미지 분석을 위해 데이터를 준비 중...');
+                const reader = new FileReader();
+                reader.onload = (e) => {
+                    const result = e.target?.result as string;
+                    const base64 = result.split(',')[1];
+                    onImageLoaded(base64, file.type || 'image/jpeg');
+                    toast.dismiss();
+                };
+                reader.readAsDataURL(file);
+            } catch (err) {
+                toast.error("이미지 처리 중 오류가 발생했습니다.");
+                console.error(err);
+            }
+            return;
+        }
+
         if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
             try {
                 toast.loading('PDF에서 텍스트를 추출하는 중...');
@@ -62,6 +81,7 @@ export default function UploadZone({ onSheetsLoaded, onPDFLoaded }: UploadZonePr
         reader.readAsArrayBuffer(file);
     };
 
+
     return (
         <div className="flex-1 flex flex-col items-center justify-center min-h-[35vh] animate-in fade-in zoom-in-95 duration-500">
             <div
@@ -91,7 +111,7 @@ export default function UploadZone({ onSheetsLoaded, onPDFLoaded }: UploadZonePr
                     <input
                         type="file"
                         className="hidden"
-                        accept=".xlsx,.xls,.csv,.pdf"
+                        accept=".xlsx,.xls,.csv,.pdf,image/*"
                         onChange={handleFileInput}
                     />
                 </label>

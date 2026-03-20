@@ -12,6 +12,27 @@ const getGeminiConfig = (model: 'flash' | 'flash-lite' = 'flash') => {
     };
 };
 
+const extractJson = (text: string): any => {
+    try {
+        // Try direct parse first
+        return JSON.parse(text);
+    } catch (e) {
+        // Find the first { and last }
+        const start = text.indexOf('{');
+        const end = text.lastIndexOf('}');
+        if (start !== -1 && end !== -1 && end > start) {
+            const jsonPart = text.substring(start, end + 1);
+            try {
+                return JSON.parse(jsonPart);
+            } catch (innerError: any) {
+                console.error('[JSON Extraction Error]', innerError.message);
+                throw new Error(`JSON 파싱 실패: ${innerError.message}`);
+            }
+        }
+        throw new Error('유효한 JSON 형식을 찾을 수 없습니다.');
+    }
+};
+
 export interface SelectionContext {
     selectedData: any[][];
     rangeCoords: {
@@ -39,7 +60,7 @@ export interface AIAnalysisResult {
     filterValue?: string;
     filterOperator?: 'equals' | 'contains' | 'greater' | 'less';
     generatedData?: any[];
-    updates?: Array<{ row: number; col: number; value: any }>;
+    updates?: Array<{ row: number; columnName?: string; col?: number; value: any }>;
     unit?: string;
     calculatedValue?: number | string;
     chartConfig?: ChartConfig;
@@ -175,16 +196,17 @@ export const processNaturalLanguageQuery = async (
 }
 
 규칙:
+- 열(Column)을 새로 추가하거나 표의 전체 구조를 변경하는 지시 (예: "제품명, 가격 찾아서 추가해/반영해") → intent: "generation"
+  - 부분 수정이 아닌 열 확장이 필요한 경우, 기존 데이터를 유지한 채로 새로운 컬럼 정보를 덧붙여 전체 데이터를 \`generatedData\` 배열로 리턴하세요.
 - 데이터 생성 또는 추출 요청 (예: "~ 데이터 추출", "~ 내용을 표로 만들어줘") → intent: "generation"
-  - PDF 텍스트가 제공된 경우, 해당 텍스트에서 가장 의미 있는 데이터들을 찾아내어 리스트(Array of Objects) 형태로 변환하세요.
-  - ${hasContext ? '기존 데이터의 열 구조를 따르거나 필요시 새 구조를 만드세요.' : '새로운 데이터 구조(열 이름들)를 정의하고 데이터를 생성하세요.'}
-  - generatedData 배열에 가급적 풍부한 데이터를 포함시키세요.
+  - PDF 텍스트나 이미지가 주어진 경우, 해당 맥락에서 누락된 정보(예: 제품명, 금액 등)를 최대한 유추하거나 찾아서 표 형태로 반환하세요.
+  - ${hasContext ? '기존 데이터의 열 구조를 따르거나 필요시 새 열을 만들어 합치세요.' : '새로운 데이터 구조(열 이름들)를 정의하고 데이터를 생성하세요.'}
 - 멀티 시트 작업(VLOOKUP, 데이터 병합) 요청 → intent: "join", joinConfig 명시
 - 차트/시각화 요청 → intent: "chart"
-- 필터링 요청 → intent: "filtering"
-- 정렬 요청 → intent: "sort"
-- 계산 요청 → intent: "calculation"
-- 수정 요청 → intent: "update"
+- 행 필터링 요청 → intent: "filtering"
+- 데이터 정렬 요청 → intent: "sort"
+- 사칙연산 등 수치 계산 요청 → intent: "calculation"
+- 기존 열의 "특정 셀 값"만 단순히 변경하는 지시 → intent: "update" (새 열 추가 불가, 반드시 기존 열 인덱스만 사용)
 
 현재 로드된 전체 시트 정보:
 ${allSheets && allSheets.length > 0 ? allSheets.map(s => `- ID: ${s.id}, 시트명: ${s.name}, 열: [${s.columns.join(', ')}], 샘플: ${JSON.stringify(s.dataSample || [])}`).join('\n') : '- 없음'}
@@ -207,7 +229,8 @@ ${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(select
             ],
             generationConfig: {
                 temperature: 0.1,
-                maxOutputTokens: 2048
+                maxOutputTokens: 8192,
+                responseMimeType: "application/json"
             }
         },
         {
@@ -219,10 +242,7 @@ ${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(select
     let rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
     if (!rawText) throw new Error('Gemini API 응답이 비어있습니다.');
 
-    // 마크다운 코드 블록(```json ... ```) 제거 로직 추가
-    rawText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
-
-    const result = JSON.parse(rawText) as AIAnalysisResult;
+    const result = extractJson(rawText) as AIAnalysisResult;
 
     // 클라이언트에서 계산값 보정
     if (result.intent === 'calculation' && result.operation && result.operation !== 'none' && result.targetColumn) {
@@ -244,4 +264,72 @@ ${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(select
     }
 
     return result;
+};
+
+export const processImageToGrid = async (
+    base64Image: string,
+    mimeType: string
+): Promise<AIAnalysisResult> => {
+    const { key: GEMINI_API_KEY, url: GEMINI_API_URL } = getGeminiConfig('flash');
+
+    if (!GEMINI_API_KEY) {
+        throw new Error('VITE_GEMINI_API_KEY가 설정되지 않았습니다.');
+    }
+
+    const systemPrompt = `당신은 이미지 속의 표(Table)나 영수증, 문서를 분석하여 정형화된 데이터로 변환하는 전문가입니다.
+이미지를 분석하여 모든 데이터를 추출하고, 이를 엑셀 시트에 바로 삽입할 수 있는 JSON 리스트 형식으로 응답하세요.
+
+응답 JSON 형식:
+{
+  "intent": "generation",
+  "explanation": "이미지 분석 및 데이터 추출 결과에 대한 한국어 설명",
+  "generatedData": [{"열이름1": "값", "열이름2": "값2", ...}]
+}
+
+규칙:
+- 이미지의 모든 행과 열을 최대한 정확하게 복원하세요.
+- 숫자는 가능한 경우 숫자 형식으로, 문자는 문자형으로 변환하세요.
+- 열 이름(Header)을 이미지 맥락에 맞게 지능적으로 생성하세요.
+- 오직 JSON 형식으로만 응답하세요.`;
+
+    const response = await axios.post(
+        GEMINI_API_URL,
+        {
+            contents: [
+                {
+                    parts: [
+                        { text: systemPrompt },
+                        {
+                            inline_data: {
+                                mime_type: mimeType,
+                                data: base64Image
+                            }
+                        }
+                    ]
+                }
+            ],
+            generationConfig: {
+                temperature: 0.1,
+                maxOutputTokens: 8192,
+                responseMimeType: "application/json"
+            }
+        },
+        {
+            headers: { 'Content-Type': 'application/json' },
+            timeout: 30000
+        }
+    );
+
+    let rawText = response.data?.candidates?.[0]?.content?.parts?.[0]?.text;
+    if (!rawText) throw new Error('Gemini API 응답이 비어있습니다.');
+
+    console.log('[AI Raw Image Response]', rawText);
+
+    try {
+        const result = extractJson(rawText) as AIAnalysisResult;
+        return result;
+    } catch (err: any) {
+        console.error('[JSON Parse Error Source]', rawText);
+        throw err;
+    }
 };

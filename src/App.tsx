@@ -9,10 +9,17 @@ import AIChartPanel from './components/AIChartPanel';
 import PrivacyModal from './components/PrivacyModal';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx-js-style';
-import { processNaturalLanguageQuery, type AIAnalysisResult, type SelectionContext, type ChartConfig } from './services/aiService';
+import { 
+    processNaturalLanguageQuery, 
+    processImageToGrid,
+    type AIAnalysisResult, 
+    type SelectionContext, 
+    type ChartConfig 
+} from './services/aiService';
 import { saveSheet, listSheets, getSheet, deleteSheet, type SheetRecord } from './services/sheetService';
 import SheetTabs from './components/SheetTabs';
 import { parseExcelWorkbook } from './utils/excelParser';
+import ErrorBoundary from './components/ErrorBoundary';
 
 export default function App() {
     const [data, setData] = useState<any[]>([]);
@@ -67,6 +74,45 @@ export default function App() {
         handleSearch(`다음 PDF 텍스트 내용을 바탕으로 핵심 데이터를 추출해서 표(Table) 형태로 만들어줘:\n\n${text}`);
     };
 
+    const handleImageLoaded = async (base64: string, mimeType: string) => {
+        setIsLoading(true);
+        setAnalysis(null);
+        try {
+            toast.loading("이미지에서 데이터를 추출하는 중...", { id: 'image-ocr' });
+            const result = await processImageToGrid(base64, mimeType);
+            toast.dismiss('image-ocr');
+            
+            if (result.intent === 'generation' && result.generatedData) {
+                const dataWithIds = result.generatedData.map((row, idx) => ({
+                    ...row,
+                    _id: `img_${idx}_${Date.now()}`
+                }));
+                
+                // Add as a new sheet
+                const cols = Object.keys(result.generatedData[0] || {}).filter(k => k !== '_id');
+                const newSheet = { 
+                    id: `sheet_${Date.now()}`, 
+                    name: `Image Data ${sheets.length + 1}`, 
+                    data: dataWithIds, 
+                    columns: cols 
+                };
+                
+                handleMultiSheetsLoaded([newSheet]);
+                setAnalysis(result);
+                // Removed setActiveTab('edit') to keep user in current tab and show inline preview
+                toast.success("✨ 이미지 속 표 데이터를 성공적으로 추출했습니다!");
+            } else {
+                toast.error("이미지에서 유효한 표 데이터를 찾지 못했습니다.");
+            }
+        } catch (err: any) {
+            console.error('[Image OCR Error]', err);
+            toast.error(`이미지 분석 실패: ${err.message || '알 수 없는 오류'}`);
+        } finally {
+            setIsLoading(false);
+            toast.dismiss('image-ocr');
+        }
+    };
+
     const handleMultiSheetsLoaded = (newSheets: any[]) => {
         setSheets(prev => {
             // Append new sheets, but if the current active sheet is empty, replace it
@@ -119,19 +165,40 @@ export default function App() {
             setAnalysis(result);
             setChartConfig(null); // 새 분석 시 이전 차트 초기화
             if (result.intent === 'generation' && result.generatedData) {
-                const dataWithIds = result.generatedData.map((row, idx) => ({
+                if (!Array.isArray(result.generatedData)) {
+                    throw new Error("AI가 유효한 배열 형태의 데이터를 반환하지 않았습니다.");
+                }
+
+                let finalData = result.generatedData;
+                
+                // Partial Update Logic
+                const isPartialMerge = data.length > 0 && finalData.length === data.length;
+
+                if (isPartialMerge) {
+                    finalData = data.map((existingRow, idx) => {
+                        const newRowData = finalData[idx] || {};
+                        return { ...existingRow, ...newRowData };
+                    });
+                }
+
+                const dataWithIds = finalData.map((row, idx) => ({
                     ...row,
-                    _id: `gen_${idx}_${Date.now()}`
+                    _id: row._id || `gen_${idx}_${Date.now()}`
                 }));
+
                 setData(dataWithIds); setFilteredData(dataWithIds);
                 setSheets(prev => {
                     const arr = [...prev];
-                    const cols = Object.keys(result.generatedData![0] || {}).filter(k => k !== '_id');
+                    const cols = Object.keys(dataWithIds[0] || {}).filter(k => k !== '_id');
                     arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: dataWithIds, columns: cols };
                     return arr;
                 });
-                setActiveTab('edit'); // 데이터 생성 시 그리드 뷰로 자동 전환
-                toast.success(`✨ ${result.generatedData.length}행의 데이터를 AI가 생성했습니다.`);
+                
+                if (isPartialMerge) {
+                    toast.success(`✨ 기존 데이터에 누락된 컬럼/조건이 성공적으로 병합되었습니다.`);
+                } else {
+                    toast.success(`✨ ${result.generatedData.length}행의 데이터를 AI가 생성했습니다.`);
+                }
             } else if (result.intent === 'chart' && result.chartConfig) {
                 setChartConfig(result.chartConfig);
                 toast.success(`📊 ${result.chartConfig.chartType.toUpperCase()} 차트를 생성했습니다.`);
@@ -172,10 +239,16 @@ export default function App() {
                 }
             } else if (result.intent === 'update' && result.updates) {
                 const newData = data.map((row, ri) => {
-                    const upd = result.updates!.find(u => u.row === ri);
-                    if (!upd) return row;
+                    const rowUpdates = result.updates!.filter(u => u.row === ri);
+                    if (rowUpdates.length === 0) return row;
+                    
                     const updated = { ...row };
-                    updated[columns[upd.col]] = upd.value;
+                    rowUpdates.forEach(upd => {
+                        const colName = upd.columnName || (upd.col !== undefined ? columns[upd.col] : undefined);
+                        if (colName && columns.includes(colName)) {
+                            updated[colName] = upd.value;
+                        }
+                    });
                     return updated;
                 });
                 setData(newData); setFilteredData(newData);
@@ -336,21 +409,21 @@ export default function App() {
                             indent: 1 // Add slight horizontal indent for readability
                         },
                         border: {
-                            top: { style: 'thin', color: { rgb: "E2E8F0" } },
-                            bottom: { style: 'thin', color: { rgb: "E2E8F0" } },
-                            left: { style: 'thin', color: { rgb: "E2E8F0" } },
-                            right: { style: 'thin', color: { rgb: "E2E8F0" } }
+                            top: { style: 'thin', color: { rgb: "000000" } },
+                            bottom: { style: 'thin', color: { rgb: "000000" } },
+                            left: { style: 'thin', color: { rgb: "000000" } },
+                            right: { style: 'thin', color: { rgb: "000000" } }
                         }
                     };
 
                     if (isHeader) {
-                        ws[address].s.font = { bold: true, color: { rgb: "334155" }, sz: 11 };
-                        ws[address].s.fill = { fgColor: { rgb: "F8FAFC" } }; // Very subtle Slate-50 background
+                        ws[address].s.font = { bold: true, color: { rgb: "000000" }, sz: 12 };
+                        ws[address].s.fill = { fgColor: { rgb: "E0E0E0" } }; // Light gray background
                         ws[address].s.border = {
-                            top: { style: 'thin', color: { rgb: "CBD5E1" } },
-                            bottom: { style: 'thin', color: { rgb: "CBD5E1" } },
-                            left: { style: 'thin', color: { rgb: "CBD5E1" } },
-                            right: { style: 'thin', color: { rgb: "CBD5E1" } }
+                            top: { style: 'thin', color: { rgb: "000000" } },
+                            bottom: { style: 'thin', color: { rgb: "000000" } },
+                            left: { style: 'thin', color: { rgb: "000000" } },
+                            right: { style: 'thin', color: { rgb: "000000" } }
                         };
                     }
                 }
@@ -483,13 +556,15 @@ export default function App() {
         
         if (activeTab === 'edit') {
             const file = e.dataTransfer.files[0];
-            if (file) handleExcelLoadedFromFile(file);
+            if (file) handleFileSelected(file);
         }
     };
 
     const handleFileSelected = (file: File) => {
         if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
             handlePDFLoadedFromFile(file);
+        } else if (file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
+            handleImageLoadedFromFile(file);
         } else {
             handleExcelLoadedFromFile(file);
         }
@@ -506,6 +581,16 @@ export default function App() {
             toast.error("PDF 처리 중 오류가 발생했습니다.");
             console.error(err);
         }
+    };
+
+    const handleImageLoadedFromFile = (file: File) => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            const result = e.target?.result as string;
+            const base64 = result.split(',')[1];
+            handleImageLoaded(base64, file.type || 'image/jpeg');
+        };
+        reader.readAsDataURL(file);
     };
 
     const handleExcelLoadedFromFile = (file: File) => {
@@ -656,7 +741,11 @@ export default function App() {
                 {/* ── 업로드존: '수정' 모드이면서 데이터가 없을 때만 표시 ── */}
                 {activeTab === 'edit' && !hasData && (
                     <div className="w-full max-w-3xl animate-in fade-in zoom-in-95 duration-500">
-                        <UploadZone onSheetsLoaded={handleMultiSheetsLoaded} onPDFLoaded={handlePDFLoaded} />
+                        <UploadZone 
+                            onSheetsLoaded={handleMultiSheetsLoaded} 
+                            onPDFLoaded={handlePDFLoaded} 
+                            onImageLoaded={handleImageLoaded}
+                        />
                     </div>
                 )}
 
@@ -758,19 +847,22 @@ export default function App() {
                                 </div>
                             </div>
 
-                            <InteractiveGrid
-                                data={filteredData}
-                                onSelectionChange={(r: number, c: number, r2: number, c2: number) => setSelectedRange({ startRow: r, startCol: c, endRow: r2, endCol: c2 })}
-                                onDataChange={(updatedFilteredData: any[]) => {
-                                    // 필터링된 데이터의 변경사항을 원본 데이터(data)에 병합
-                                    const newData = data.map(originalRow => {
-                                        const found = updatedFilteredData.find(u => u._id === originalRow._id);
-                                        return found ? found : originalRow;
-                                    });
-                                    setData(newData); 
-                                    setFilteredData(updatedFilteredData); 
-                                }}
-                            />
+                            <ErrorBoundary>
+                                <InteractiveGrid
+                                    data={filteredData}
+                                    onSelectionChange={(r: number, c: number, r2: number, c2: number) => setSelectedRange({ startRow: r, startCol: c, endRow: r2, endCol: c2 })}
+                                    onDataChange={(updatedFilteredData: any[]) => {
+                                        // 필터링된 데이터의 변경사항을 원본 데이터(data)에 병합
+                                        const newData = data.map(originalRow => {
+                                            const found = updatedFilteredData.find(u => u._id === originalRow._id);
+                                            return found ? found : originalRow;
+                                        });
+                                        setData(newData); 
+                                        setFilteredData(updatedFilteredData); 
+                                    }}
+                                />
+                            </ErrorBoundary>
+
                         </div>
 
                         {/* 하단 여백용 */}

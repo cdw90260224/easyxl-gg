@@ -41,7 +41,7 @@ export default function SearchBar({ value, onChange, onSearch, onFileSelected }:
                                 type="file"
                                 ref={fileInputRef}
                                 className="hidden"
-                                accept=".pdf,.xlsx,.xls,.csv"
+                                accept=".pdf,.xlsx,.xls,.csv,image/*"
                                 onChange={handleFileChange}
                             />
                             <button
