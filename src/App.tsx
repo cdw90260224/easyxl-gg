@@ -11,7 +11,7 @@ import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx-js-style';
 import { 
     processNaturalLanguageQuery, 
-    processImageToGrid,
+    processImagesToGrid,
     type AIAnalysisResult, 
     type SelectionContext, 
     type ChartConfig 
@@ -74,16 +74,16 @@ export default function App() {
         handleSearch(`다음 PDF 텍스트 내용을 바탕으로 핵심 데이터를 추출해서 표(Table) 형태로 만들어줘:\n\n${text}`);
     };
 
-    const handleImageLoaded = async (base64: string, mimeType: string) => {
+    const handleImagesLoaded = async (images: {base64: string, mimeType: string}[]) => {
         setIsLoading(true);
         setAnalysis(null);
         try {
-            toast.loading("이미지에서 데이터를 추출하는 중...", { id: 'image-ocr' });
-            const result = await processImageToGrid(base64, mimeType);
+            toast.loading(`${images.length}장의 이미지 통합 분석 진행 중...`, { id: 'image-ocr' });
+            const result = await processImagesToGrid(images);
             toast.dismiss('image-ocr');
             
             if (result.intent === 'generation' && result.generatedData) {
-                const dataWithIds = result.generatedData.map((row, idx) => ({
+                const dataWithIds = result.generatedData.map((row: any, idx: number) => ({
                     ...row,
                     _id: `img_${idx}_${Date.now()}`
                 }));
@@ -92,7 +92,7 @@ export default function App() {
                 const cols = Object.keys(result.generatedData[0] || {}).filter(k => k !== '_id');
                 const newSheet = { 
                     id: `sheet_${Date.now()}`, 
-                    name: `Image Data ${sheets.length + 1}`, 
+                    name: `Merged Image Data ${sheets.length + 1}`, 
                     data: dataWithIds, 
                     columns: cols 
                 };
@@ -100,20 +100,20 @@ export default function App() {
                 handleMultiSheetsLoaded([newSheet]);
                 setAnalysis(result);
                 // Removed setActiveTab('edit') to keep user in current tab and show inline preview
-                toast.success("✨ 이미지 속 표 데이터를 성공적으로 추출했습니다!");
+                toast.success(`✨ ${images.length}장의 이미지 병합 데이터를 성공적으로 표로 반환했습니다!`);
             } else {
                 toast.error("이미지에서 유효한 표 데이터를 찾지 못했습니다.");
             }
         } catch (err: any) {
             console.error('[Image OCR Error]', err);
-            toast.error(`이미지 분석 실패: ${err.message || '알 수 없는 오류'}`);
+            toast.error(`병합 분석 실패: ${err.message || '알 수 없는 오류'}`);
         } finally {
             setIsLoading(false);
             toast.dismiss('image-ocr');
         }
     };
 
-    const handleMultiSheetsLoaded = (newSheets: any[]) => {
+    const handleMultiSheetsLoaded = (newSheets: { id: string; name: string; data: any[]; columns: string[] }[]) => {
         setSheets(prev => {
             // Append new sheets, but if the current active sheet is empty, replace it
             const currentSheet = prev[activeSheetIndex];
@@ -155,7 +155,7 @@ export default function App() {
                 }
                 selectionContext = { selectedData, rangeCoords: selectedRange };
             }
-            const sheetContexts = sheets.map(s => ({ 
+            const sheetContexts = sheets.map((s: { id: string; name: string; columns: string[]; data: any[] }) => ({ 
                 id: s.id, 
                 name: s.name, 
                 columns: s.columns,
@@ -175,13 +175,13 @@ export default function App() {
                 const isPartialMerge = data.length > 0 && finalData.length === data.length;
 
                 if (isPartialMerge) {
-                    finalData = data.map((existingRow, idx) => {
+                    finalData = data.map((existingRow: any, idx: number) => {
                         const newRowData = finalData[idx] || {};
                         return { ...existingRow, ...newRowData };
                     });
                 }
 
-                const dataWithIds = finalData.map((row, idx) => ({
+                const dataWithIds = finalData.map((row: any, idx: number) => ({
                     ...row,
                     _id: row._id || `gen_${idx}_${Date.now()}`
                 }));
@@ -204,22 +204,22 @@ export default function App() {
                 toast.success(`📊 ${result.chartConfig.chartType.toUpperCase()} 차트를 생성했습니다.`);
             } else if (result.intent === 'join' && result.joinConfig) {
                 const { targetSheetId, sourceSheetId, targetKey, sourceKey, columnsToCopy } = result.joinConfig;
-                const sourceSheet = sheets.find(s => s.id === sourceSheetId);
-                const targetSheet = sheets.find(s => s.id === targetSheetId);
+                const sourceSheet = sheets.find((s: { id: string; name: string; data: any[]; columns: string[] }) => s.id === sourceSheetId);
+                const targetSheet = sheets.find((s: { id: string; name: string; data: any[]; columns: string[] }) => s.id === targetSheetId);
                 
                 if (sourceSheet && targetSheet) {
                     const lookupMap = new Map();
-                    sourceSheet.data.forEach(row => {
+                    sourceSheet.data.forEach((row: any) => {
                         const keyVal = String(row[sourceKey]).trim().toLowerCase();
                         lookupMap.set(keyVal, row);
                     });
 
-                    const newData = data.map(row => {
+                    const newData = data.map((row: any) => {
                         const keyVal = String(row[targetKey]).trim().toLowerCase();
                         const sourceRow = lookupMap.get(keyVal);
                         if (sourceRow) {
                             const newRow = { ...row };
-                            columnsToCopy.forEach(col => { if(sourceRow[col] !== undefined) newRow[col] = sourceRow[col]; });
+                            columnsToCopy.forEach((col: string) => { if(sourceRow[col] !== undefined) newRow[col] = sourceRow[col]; });
                             return newRow;
                         }
                         return row;
@@ -238,12 +238,12 @@ export default function App() {
                     toast.error('지정된 시트를 찾을 수 없습니다.');
                 }
             } else if (result.intent === 'update' && result.updates) {
-                const newData = data.map((row, ri) => {
+                const newData = data.map((row: any, ri: number) => {
                     const rowUpdates = result.updates!.filter(u => u.row === ri);
                     if (rowUpdates.length === 0) return row;
                     
                     const updated = { ...row };
-                    rowUpdates.forEach(upd => {
+                    rowUpdates.forEach((upd: { col?: number; columnName?: string; value: any }) => {
                         const colName = upd.columnName || (upd.col !== undefined ? columns[upd.col] : undefined);
                         if (colName && columns.includes(colName)) {
                             updated[colName] = upd.value;
@@ -257,12 +257,13 @@ export default function App() {
                     arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: newData };
                     return arr;
                 });
-                toast.success('선택 영역이 업데이트되었습니다.');
+                toast.success('✨ 선택 영역이 성공적으로 업데이트되었습니다.');
+                setAnalysis(result);
             } else if (result.intent === 'filtering') {
                 const { filterColumn, filterValue, filterOperator } = result;
                 let filtered = data;
                 if (filterColumn && filterValue && columns.includes(filterColumn)) {
-                    filtered = data.filter(row => {
+                    filtered = data.filter((row: any) => {
                         const cell = String(row[filterColumn]).toLowerCase();
                         const target = String(filterValue).toLowerCase();
                         switch (filterOperator) {
@@ -275,18 +276,19 @@ export default function App() {
                     });
                 } else {
                     const kw = filterValue || query.replace(/(필터링|해줘|찾아줘|행)/g, '').trim();
-                    filtered = data.filter(row =>
-                        Object.values(row).some(v => String(v).toLowerCase().includes(kw.toLowerCase()))
+                    filtered = data.filter((row: any) =>
+                        Object.values(row).some((v: any) => String(v).toLowerCase().includes(kw.toLowerCase()))
                     );
                 }
                 setFilteredData(filtered);
                 filtered.length === 0
                     ? toast.info('검색 결과가 없습니다.')
-                    : toast.success(`${filtered.length}건 필터링되었습니다.`);
+                    : toast.success(`✨ ${filtered.length}건 필터링되었습니다.`);
+                setAnalysis(result);
             } else if (result.intent === 'sort' && result.sortConfig) {
                 const { column, direction } = result.sortConfig;
                 if (columns.includes(column)) {
-                    const sorted = [...data].sort((a, b) => {
+                    const sorted = [...data].sort((a: any, b: any) => {
                         const valA = String(a[column] ?? '').replace(/,/g, '');
                         const valB = String(b[column] ?? '').replace(/,/g, '');
                         const numA = parseFloat(valA);
@@ -308,9 +310,13 @@ export default function App() {
                         return arr;
                     });
                     toast.success(`✨ ${column} 기준 ${direction === 'asc' ? '오름차순' : '내림차순'} 정렬 완료`);
+                } else {
+                    toast.error(`❌ 정렬할 대상 열("${column}")을 찾을 수 없습니다.`);
                 }
+                setAnalysis(result);
             } else if (result.intent === 'calculation') {
-                toast.success('분석이 완료되었습니다.');
+                toast.success('✨ 분석이 완료되었습니다.');
+                setAnalysis(result);
             }
         } catch (err: any) {
             console.error('[AI Error]', err);
@@ -343,7 +349,7 @@ export default function App() {
             if (data.length === 0) { toast.warning('내보낼 데이터가 없습니다.'); return; }
             
             const keys = Object.keys(data[0]).filter(k => k !== '_id');
-            const isAutoGeneratedHeader = keys.length > 0 && keys.every(k => k.match(/^[A-Z]$/));
+            const isAutoGeneratedHeader = keys.length > 0 && keys.every((k: string) => k.match(/^[A-Z]$/));
             
             const aoa: any[][] = [];
             const headerRows: number[] = [];
@@ -359,7 +365,7 @@ export default function App() {
             // Helper to check if a row is a section header (consistent with InteractiveGrid)
             const isHeaderRow = (row: any) => {
                 const cellValue = String(row[keys[0]] || '');
-                const hasOnlyOneValue = keys.filter(k => String(row[k] || '').trim() !== '').length === 1;
+                const hasOnlyOneValue = keys.filter((k: string) => String(row[k] || '').trim() !== '').length === 1;
                 return hasOnlyOneValue || 
                        cellValue.includes('전월대비') || 
                        cellValue.includes('일별') || 
@@ -369,7 +375,7 @@ export default function App() {
                        cellValue.includes('키워드');
             };
 
-            data.forEach((row, i) => {
+            data.forEach((row: any, i: number) => {
                 const isSectionHeader = isHeaderRow(row);
                 
                 // Insert 2 empty rows before a section header, except for the very first row of the data
@@ -383,7 +389,7 @@ export default function App() {
                     headerRows.push(aoa.length);
                 }
 
-                const rowData = keys.map(k => row[k]);
+                const rowData = keys.map((k: string) => row[k]);
                 aoa.push(rowData);
             });
 
@@ -393,7 +399,7 @@ export default function App() {
             const range = XLSX.utils.decode_range(ws['!ref']!);
             for (let R = range.s.r; R <= range.e.r; ++R) {
                 const isHeader = headerRows.includes(R);
-                const isRowEmpty = aoa[R].every(v => String(v || '').trim() === '');
+                const isRowEmpty = aoa[R].every((v: any) => String(v || '').trim() === '');
 
                 if (isRowEmpty) continue;
 
@@ -430,7 +436,7 @@ export default function App() {
             }
 
             // Autofit & Column Widths
-            const colWidths = keys.map((_, C) => {
+            const colWidths = keys.map((_: string, C: number) => {
                 let maxLen = 10;
                 for (let R = range.s.r; R <= range.e.r; ++R) {
                     const cell = aoa[R][C];
@@ -460,7 +466,7 @@ export default function App() {
         if (!title) return;
         setIsSaving(true);
         try {
-            const columns = Object.keys(filteredData[0]).map(key => ({ field: key, headerName: key }));
+            const columns = Object.keys(filteredData[0]).map((key: string) => ({ field: key, headerName: key }));
             await saveSheet(title, columns, filteredData);
             toast.success(`✅ "${title}" 시트가 DB에 저장되었습니다!`);
         } catch (err: any) {
@@ -489,7 +495,7 @@ export default function App() {
                 ...row,
                 _id: row._id || `db_${idx}_${Date.now()}`
             }));
-            const columns = dataWithIds.length > 0 ? Object.keys(dataWithIds[0]).filter(k => k !== '_id') : [];
+            const columns = dataWithIds.length > 0 ? Object.keys(dataWithIds[0]).filter((k: string) => k !== '_id') : [];
             let newActiveIndex = activeSheetIndex;
 
             setSheets(prev => {
@@ -541,7 +547,7 @@ export default function App() {
     const handleDragOver = (e: React.DragEvent) => {
         e.preventDefault();
         e.stopPropagation();
-        if (activeTab === 'edit') setIsGlobalDragging(true);
+        setIsGlobalDragging(true);
     };
     const handleDragLeave = (e: React.DragEvent) => {
         e.preventDefault();
@@ -554,19 +560,21 @@ export default function App() {
         e.stopPropagation();
         setIsGlobalDragging(false);
         
-        if (activeTab === 'edit') {
-            const file = e.dataTransfer.files[0];
-            if (file) handleFileSelected(file);
-        }
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) handleFilesSelected(files);
     };
 
-    const handleFileSelected = (file: File) => {
-        if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
-            handlePDFLoadedFromFile(file);
-        } else if (file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
-            handleImageLoadedFromFile(file);
-        } else {
-            handleExcelLoadedFromFile(file);
+    const handleFilesSelected = (files: File[]) => {
+        const imageFiles = files.filter((f: File) => f.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(f.name));
+        const pdfFiles = files.filter((f: File) => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
+        const excelFiles = files.filter((f: File) => !imageFiles.includes(f) && !pdfFiles.includes(f));
+
+        if (imageFiles.length > 0) {
+            handleImagesLoadedFromFiles(imageFiles);
+        } else if (pdfFiles.length > 0) {
+            handlePDFLoadedFromFile(pdfFiles[0]);
+        } else if (excelFiles.length > 0) {
+            handleExcelLoadedFromFile(excelFiles[0]);
         }
     };
 
@@ -583,14 +591,28 @@ export default function App() {
         }
     };
 
-    const handleImageLoadedFromFile = (file: File) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-            const result = e.target?.result as string;
-            const base64 = result.split(',')[1];
-            handleImageLoaded(base64, file.type || 'image/jpeg');
-        };
-        reader.readAsDataURL(file);
+    const handleImagesLoadedFromFiles = async (files: File[]) => {
+        try {
+            toast.loading(`${files.length}장의 이미지를 병합 준비 중...`);
+            const promises = files.map((file: File) => {
+                return new Promise<{base64: string, mimeType: string}>((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const result = e.target?.result as string;
+                        const base64 = result.split(',')[1];
+                        resolve({ base64, mimeType: file.type || 'image/jpeg' });
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            });
+            const imageDataArray = await Promise.all(promises);
+            toast.dismiss();
+            handleImagesLoaded(imageDataArray);
+        } catch (err) {
+            toast.error("다중 이미지 파일들을 읽는 중 오류가 발생했습니다.");
+            toast.dismiss();
+        }
     };
 
     const handleExcelLoadedFromFile = (file: File) => {
@@ -620,7 +642,7 @@ export default function App() {
                         <svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-deepblue-500 animate-bounce"><path d="M4 14.899A7 7 0 1 1 15.71 8h1.79a4.5 4.5 0 0 1 2.5 8.242" /><path d="M12 12v9" /><path d="m8 17 4 4 4-4" /></svg>
                         <div className="text-center">
                             <h3 className="text-2xl font-bold text-gray-900 dark:text-gray-100 tracking-tight">여기에 파일을 내려놓으세요</h3>
-                            <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">자동으로 새 시트에 병합됩니다</p>
+                            <p className="text-gray-500 dark:text-gray-400 mt-2 font-medium">이미지, 엑셀, PDF를 즉시 분석합니다</p>
                         </div>
                     </div>
                 </div>
@@ -682,7 +704,7 @@ export default function App() {
                         onSearch={(q) => {
                             handleSearch(q);
                         }}
-                        onFileSelected={activeTab === 'create' ? handleFileSelected : undefined}
+                        onFilesSelected={handleFilesSelected}
                     />
 
                     <div className="flex flex-wrap items-center justify-center gap-2">
@@ -744,7 +766,7 @@ export default function App() {
                         <UploadZone 
                             onSheetsLoaded={handleMultiSheetsLoaded} 
                             onPDFLoaded={handlePDFLoaded} 
-                            onImageLoaded={handleImageLoaded}
+                            onImagesLoaded={handleImagesLoaded}
                         />
                     </div>
                 )}

@@ -5,16 +5,15 @@ interface SearchBarProps {
     value: string;
     onChange: (v: string) => void;
     onSearch: (v: string) => void;
-    onFileSelected?: (file: File) => void;
+    onFilesSelected?: (files: File[]) => void;
 }
 
-export default function SearchBar({ value, onChange, onSearch, onFileSelected }: SearchBarProps) {
+export default function SearchBar({ value, onChange, onSearch, onFilesSelected }: SearchBarProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file && onFileSelected) {
-            onFileSelected(file);
+        if (e.target.files && e.target.files.length > 0 && onFilesSelected) {
+            onFilesSelected(Array.from(e.target.files));
         }
     };
 
@@ -35,12 +34,13 @@ export default function SearchBar({ value, onChange, onSearch, onFileSelected }:
                 />
                 
                 <div className="flex items-center gap-2 mr-3">
-                    {onFileSelected && (
+                    {onFilesSelected && (
                         <>
                             <input
                                 type="file"
                                 ref={fileInputRef}
                                 className="hidden"
+                                multiple
                                 accept=".pdf,.xlsx,.xls,.csv,image/*"
                                 onChange={handleFileChange}
                             />

@@ -187,7 +187,7 @@ export const processNaturalLanguageQuery = async (
   "filterValue": "필터 값",
   "filterOperator": "equals" | "contains" | "greater" | "less",
   "generatedData": [{"열이름": "값", "열이름2": "값2"}],
-  "updates": [{"row": 숫자, "col": 숫자, "value": 값}],
+  "updates": [{"row": "배열 인덱스(0부터 시작하는 숫자)", "columnName": "수정할 열 이름", "value": "값"}],
   "unit": "단위",
   "calculatedValue": 숫자,
   "chartConfig": {"chartType": "bar|pie|line|area", "xAxis": "X축 열이름", "yAxis": "Y축 열이름", "title": "차트 제목"},
@@ -206,7 +206,8 @@ export const processNaturalLanguageQuery = async (
 - 행 필터링 요청 → intent: "filtering"
 - 데이터 정렬 요청 → intent: "sort"
 - 사칙연산 등 수치 계산 요청 → intent: "calculation"
-- 기존 열의 "특정 셀 값"만 단순히 변경하는 지시 → intent: "update" (새 열 추가 불가, 반드시 기존 열 인덱스만 사용)
+- 기존 데이터 영역 내 특정 셀 값 내용만 단순히 변경/수정하는 지시 (예: "첫번째 이유를 OO으로 바꿔줘") → intent: "update"
+  - \`columnName\`에는 현재 표의 열 이름 중 정확히 일치하는 문자열을 넣고, \`row\`에는 대상 행의 0부터 시작하는 인덱스(0=첫행, 1=두번째 행...) 숫자를 넣으세요.
 
 현재 로드된 전체 시트 정보:
 ${allSheets && allSheets.length > 0 ? allSheets.map(s => `- ID: ${s.id}, 시트명: ${s.name}, 열: [${s.columns.join(', ')}], 샘플: ${JSON.stringify(s.dataSample || [])}`).join('\n') : '- 없음'}
@@ -266,9 +267,8 @@ ${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(select
     return result;
 };
 
-export const processImageToGrid = async (
-    base64Image: string,
-    mimeType: string
+export const processImagesToGrid = async (
+    images: { base64: string; mimeType: string }[]
 ): Promise<AIAnalysisResult> => {
     const { key: GEMINI_API_KEY, url: GEMINI_API_URL } = getGeminiConfig('flash');
 
@@ -276,20 +276,19 @@ export const processImageToGrid = async (
         throw new Error('VITE_GEMINI_API_KEY가 설정되지 않았습니다.');
     }
 
-    const systemPrompt = `당신은 이미지 속의 표(Table)나 영수증, 문서를 분석하여 정형화된 데이터로 변환하는 전문가입니다.
-이미지를 분석하여 모든 데이터를 추출하고, 이를 엑셀 시트에 바로 삽입할 수 있는 JSON 리스트 형식으로 응답하세요.
+    const systemPrompt = `당신은 여러 장의 이미지(표, 영수증, 문서 등)를 분석하여 하나의 정형화된 데이터셋으로 변환하는 통합 데이터 전문가입니다.
+사용자가 한 장 또는 여러 장의 이미지를 제공할 것입니다. 이 모든 이미지에서 데이터를 추출하여, 문서 형식이 서로 조금 다르더라도 **반드시 공통된 하나의 표준 열 이름(Standardized Headers)을 가진 엑셀용 JSON 리스트**로 합쳐서 응답하세요.
 
 응답 JSON 형식:
 {
   "intent": "generation",
-  "explanation": "이미지 분석 및 데이터 추출 결과에 대한 한국어 설명",
-  "generatedData": [{"열이름1": "값", "열이름2": "값2", ...}]
+  "explanation": "이미지 분석 및 병합 결과에 대한 한국어 설명",
+  "generatedData": [{"표준열이름1": "값", "표준열이름2": "값2", ...}]
 }
 
 규칙:
-- 이미지의 모든 행과 열을 최대한 정확하게 복원하세요.
-- 숫자는 가능한 경우 숫자 형식으로, 문자는 문자형으로 변환하세요.
-- 열 이름(Header)을 이미지 맥락에 맞게 지능적으로 생성하세요.
+- 제공된 모든 이미지의 행과 열 데이터를 스캔하고 누락 없이 통합하세요.
+- 각 이미지마다 열 이름(Header)이 다르더라도(예: '금액', '가격', '총액'), 의미가 같다면 가장 적절한 '표준 열 이름' 하나로 통일하세요.
 - 오직 JSON 형식으로만 응답하세요.`;
 
     const response = await axios.post(
@@ -299,12 +298,12 @@ export const processImageToGrid = async (
                 {
                     parts: [
                         { text: systemPrompt },
-                        {
+                        ...images.map(img => ({
                             inline_data: {
-                                mime_type: mimeType,
-                                data: base64Image
+                                mime_type: img.mimeType,
+                                data: img.base64
                             }
-                        }
+                        }))
                     ]
                 }
             ],

@@ -8,43 +8,55 @@ import { extractTextFromPDF } from '../utils/pdfParser';
 interface UploadZoneProps {
     onSheetsLoaded: (sheets: ParsedSheet[]) => void;
     onPDFLoaded: (text: string) => void;
-    onImageLoaded: (base64: string, mimeType: string) => void;
+    onImagesLoaded: (images: {base64: string, mimeType: string}[]) => void;
 }
 
-export default function UploadZone({ onSheetsLoaded, onPDFLoaded, onImageLoaded }: UploadZoneProps) {
+export default function UploadZone({ onSheetsLoaded, onPDFLoaded, onImagesLoaded }: UploadZoneProps) {
     const [isDragging, setIsDragging] = useState(false);
 
     const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         setIsDragging(false);
 
-        const file = e.dataTransfer.files[0];
-        if (file) processFile(file);
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0) processFiles(files);
     }, []);
 
     const handleFileInput = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) processFile(file);
+        if (e.target.files) processFiles(Array.from(e.target.files));
     };
 
-    const processFile = async (file: File) => {
-        if (file.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(file.name)) {
+    const processFiles = async (files: File[]) => {
+        const imageFiles = files.filter(f => f.type.startsWith('image/') || /\.(jpg|jpeg|png|webp)$/i.test(f.name));
+        const pdfFiles = files.filter(f => f.type === 'application/pdf' || f.name.endsWith('.pdf'));
+        const excelFiles = files.filter(f => !imageFiles.includes(f) && !pdfFiles.includes(f));
+
+        if (imageFiles.length > 0) {
             try {
-                toast.loading('이미지 분석을 위해 데이터를 준비 중...');
-                const reader = new FileReader();
-                reader.onload = (e) => {
-                    const result = e.target?.result as string;
-                    const base64 = result.split(',')[1];
-                    onImageLoaded(base64, file.type || 'image/jpeg');
-                    toast.dismiss();
-                };
-                reader.readAsDataURL(file);
+                toast.loading(`${imageFiles.length}장의 이미지를 분석하기 위해 준비 중...`);
+                const promises = imageFiles.map(file => {
+                    return new Promise<{base64: string, mimeType: string}>((resolve, reject) => {
+                        const reader = new FileReader();
+                        reader.onload = (e) => {
+                            const result = e.target?.result as string;
+                            const base64 = result.split(',')[1];
+                            resolve({ base64, mimeType: file.type || 'image/jpeg' });
+                        };
+                        reader.onerror = reject;
+                        reader.readAsDataURL(file);
+                    });
+                });
+                const imageDataArray = await Promise.all(promises);
+                toast.dismiss();
+                onImagesLoaded(imageDataArray);
             } catch (err) {
-                toast.error("이미지 처리 중 오류가 발생했습니다.");
+                toast.error("이미지 병합 처리 중 오류가 발생했습니다.");
                 console.error(err);
             }
-            return;
         }
+
+        const file = pdfFiles[0] || excelFiles[0];
+        if (!file) return;
 
         if (file.type === 'application/pdf' || file.name.endsWith('.pdf')) {
             try {
@@ -111,6 +123,7 @@ export default function UploadZone({ onSheetsLoaded, onPDFLoaded, onImageLoaded 
                     <input
                         type="file"
                         className="hidden"
+                        multiple
                         accept=".xlsx,.xls,.csv,.pdf,image/*"
                         onChange={handleFileInput}
                     />
