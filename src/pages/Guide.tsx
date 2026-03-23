@@ -84,9 +84,9 @@ export default function Guide() {
                         
                         <div className="space-y-4">
                             {[
-                                { icon: Upload, title: "파일 형태의 데이터 업로드", desc: "파일 업로드 탭에서 분석할 이미지나 기존 엑셀 파일을 선택하여 업로드합니다." },
-                                { icon: MousePointerClick, title: "데이터 검토 및 수정", desc: "분석된 데이터를 InteractiveGrid에서 직접 확인하고, 필요 시 간편하게 클릭하여 수정합니다." },
                                 { icon: MessageSquareText, title: "AI 대화형 분석", desc: "필요한 통계 수치나 데이터 정렬, 필터링을 상단 검색창에 자연어로 입력하여 답변을 얻습니다." },
+                                { icon: MousePointerClick, title: "데이터 검토 및 수정", desc: "분석된 데이터를 InteractiveGrid에서 직접 확인하고, 필요 시 간편하게 클릭하여 수정합니다." },
+                                { icon: Upload, title: "파일 형태의 데이터 업로드", desc: "파일 업로드 탭에서 분석할 이미지나 기존 엑셀 파일을 선택하여 업로드합니다." },
                                 { icon: Download, title: "엑셀 데이터 내보내기", desc: "최종 가공된 양질의 데이터를 엑셀(Excel) 포맷으로 내보내어 안전하게 보관합니다." }
                             ].map((step, idx) => (
                                 <div key={idx} className="flex items-start gap-4 p-5 rounded-2xl bg-white dark:bg-[#1a1a1a] border border-gray-100 dark:border-gray-800 shadow-sm hover:border-indigo-200 dark:hover:border-indigo-800/50 transition-colors">
