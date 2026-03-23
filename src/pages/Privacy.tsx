@@ -77,7 +77,7 @@ export default function Privacy() {
                             구글 애드센스(Google AdSense) 관련 고지
                         </h2>
                         <p>
-                            본 사이트는 구글에서 제공하는 광고 서비스인 애드센스를 사용합니다. 구글은 사용자의 방문 기록을 바탕으로 맞춤형 광고를 제공하기 위해 쿠키를 사용할 수 있습니다. 사용자는 <strong>[구글 광고 설정]</strong>을 통해 맞춤형 광고를 해제할 수 있습니다.
+                            본 사이트는 구글에서 제공하는 광고 서비스인 애드센스를 사용합니다. 구글은 사용자의 방문 기록을 바탕으로 맞춤형 광고를 제공하기 위해 쿠키를 사용할 수 있습니다. 사용자는 <a href="https://www.google.com/settings/ads" target="_blank" rel="noopener noreferrer" className="text-indigo-600 dark:text-indigo-400 hover:underline font-bold font-semibold">[구글 광고 설정]</a>을 통해 맞춤형 광고를 해제할 수 있습니다.
                         </p>
                     </section>
 
