@@ -23,6 +23,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { Routes, Route, Link } from 'react-router-dom';
 import Guide from './pages/Guide';
 import Privacy from './pages/Privacy';
+import CookieBanner from './components/CookieBanner';
 
 export default function App() {
     const [data, setData] = useState<any[]>([]);
@@ -639,6 +640,7 @@ export default function App() {
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
+            <CookieBanner />
             {isGlobalDragging && (
                 <div className="absolute inset-0 z-[100] bg-deepblue-900/50 backdrop-blur-sm flex items-center justify-center transition-all">
                     <div className="bg-white dark:bg-gray-900 p-10 rounded-3xl shadow-2xl flex flex-col items-center gap-4 border-[3px] border-dashed border-deepblue-500 animate-in zoom-in-95 duration-200 pointer-events-none">
