@@ -1,18 +1,45 @@
 import { Moon, Sun, Shield, ShieldAlert, FileSpreadsheet, BookOpen } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useGoogleLogin } from '@react-oauth/google';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 
 export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivacyPolicy }: any) {
     const [isSyncing, setIsSyncing] = useState(false);
     const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [user, setUser] = useState<any>(null);
 
-    // Mock google login
-    const login = useGoogleLogin({
-        onSuccess: () => setIsLoggedIn(true),
-        onError: (error) => console.log('Login Failed:', error)
-    });
+    useEffect(() => {
+        if (!supabase) return;
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setUser(session?.user ?? null);
+            setIsLoggedIn(!!session?.user);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setUser(session?.user ?? null);
+            setIsLoggedIn(!!session?.user);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    const handleLogin = async () => {
+        if (!supabase) return toast.error("Supabase 연결이 필요합니다.");
+        const { error } = await supabase.auth.signInWithOAuth({
+            provider: 'google',
+            options: {
+                redirectTo: window.location.origin,
+            }
+        });
+        if (error) toast.error(error.message);
+    };
+
+    const handleLogout = async () => {
+        if (!supabase) return;
+        await supabase.auth.signOut();
+        toast.success("로그아웃 되었습니다.");
+    };
 
     const handleSync = () => {
         setIsSyncing(true);
@@ -61,24 +88,40 @@ export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivac
                     {/* Sync / Login */}
                     {!isLoggedIn ? (
                         <button
-                            onClick={() => login()}
+                            onClick={handleLogin}
                             className="text-sm font-bold px-5 py-2 border border-gray-200 dark:border-gray-800 rounded-xl hover:bg-gray-50 dark:hover:bg-gray-800 transition-all text-gray-700 dark:text-gray-300 shadow-sm"
                         >
                             Sign in with Google
                         </button>
                     ) : (
-                        <button
-                            onClick={handleSync}
-                            disabled={isSyncing}
-                            className="text-sm font-bold px-6 py-2.5 bg-deepblue-600 text-white rounded-xl hover:bg-deepblue-700 disabled:opacity-50 transition-all shadow-lg shadow-deepblue-500/20 flex items-center gap-2"
-                        >
-                            {isSyncing ? (
-                                <>
-                                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
-                                    동기화 중...
-                                </>
-                            ) : '구글 시트에 반영'}
-                        </button>
+                        <div className="flex items-center gap-3">
+                            <div className="flex items-center gap-2 hidden sm:flex">
+                                {user?.user_metadata?.avatar_url && (
+                                    <img src={user.user_metadata.avatar_url} alt="Profile" className="w-8 h-8 rounded-full border border-gray-200 dark:border-gray-700" />
+                                )}
+                                <span className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                                    {user?.user_metadata?.full_name || '사용자'}님
+                                </span>
+                            </div>
+                            <button
+                                onClick={handleSync}
+                                disabled={isSyncing}
+                                className="text-sm font-bold px-4 py-2 bg-deepblue-600 text-white rounded-xl hover:bg-deepblue-700 disabled:opacity-50 transition-all shadow-md shadow-deepblue-500/20 flex items-center gap-2"
+                            >
+                                {isSyncing ? (
+                                    <>
+                                        <div className="w-3 h-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                                        동기화 중...
+                                    </>
+                                ) : '구글 시트 연동'}
+                            </button>
+                            <button
+                                onClick={handleLogout}
+                                className="text-sm font-bold px-4 py-2 bg-gray-100 hover:bg-gray-200 dark:bg-gray-800 dark:hover:bg-gray-700 text-gray-700 dark:text-gray-300 rounded-xl transition-all"
+                            >
+                                로그아웃
+                            </button>
+                        </div>
                     )}
 
                     {/* Theme Toggle */}
