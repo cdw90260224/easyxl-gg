@@ -20,6 +20,9 @@ import { saveSheet, listSheets, getSheet, deleteSheet, type SheetRecord } from '
 import SheetTabs from './components/SheetTabs';
 import { parseExcelWorkbook } from './utils/excelParser';
 import ErrorBoundary from './components/ErrorBoundary';
+import { Routes, Route, Link } from 'react-router-dom';
+import Guide from './pages/Guide';
+import Privacy from './pages/Privacy';
 
 export default function App() {
     const [data, setData] = useState<any[]>([]);
@@ -658,7 +661,9 @@ export default function App() {
                 onShowPrivacyPolicy={() => setIsPrivacyModalOpen(true)}
             />
 
-            <main className="flex-1 flex flex-col items-center pt-12 px-4 pb-20 space-y-8">
+            <Routes>
+                <Route path="/" element={
+                    <main className="flex-1 flex flex-col items-center pt-12 px-4 pb-20 space-y-8">
                 {/* ── 상단: 타이틀 + 검색바 (항상 표시) ── */}
                 <div className="w-full max-w-4xl space-y-8 text-center">
                     {/* Center Tab Bar */}
@@ -934,6 +939,19 @@ export default function App() {
                     </div>
                 )}
             </main>
+        } />
+        <Route path="/guide" element={<Guide />} />
+        <Route path="/privacy" element={<Privacy />} />
+    </Routes>
+
+    {/* Global Footer */}
+    <footer className="w-full py-8 border-t border-gray-200 dark:border-gray-800 bg-slate-50 dark:bg-[#0f0f12]">
+        <div className="container mx-auto px-4 text-center">
+            <Link to="/privacy" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                개인정보처리방침
+            </Link>
         </div>
+    </footer>
+</div>
     );
 }

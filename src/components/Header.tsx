@@ -1,4 +1,5 @@
-import { Moon, Sun, Shield, ShieldAlert, FileSpreadsheet } from 'lucide-react';
+import { Moon, Sun, Shield, ShieldAlert, FileSpreadsheet, BookOpen } from 'lucide-react';
+import { Link } from 'react-router-dom';
 import { useGoogleLogin } from '@react-oauth/google';
 import { useState } from 'react';
 import { toast } from 'sonner';
@@ -28,10 +29,9 @@ export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivac
                     <div className="p-2 bg-deepblue-500/10 rounded-xl group-hover:bg-deepblue-500/20 transition-colors">
                         <FileSpreadsheet className="w-6 h-6 text-deepblue-600" />
                     </div>
-                    <h1 className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                    <Link to="/" className="text-xl font-extrabold tracking-tight text-gray-900 dark:text-gray-100 flex items-center gap-2">
                         EasyXL<span className="text-deepblue-600">.GG</span>
-                        <span className="text-[10px] bg-green-500 text-white px-1.5 py-0.5 rounded-full animate-pulse">PATCH v1.6.8</span>
-                    </h1>
+                    </Link>
                 </div>
 
                 <div className="flex items-center gap-4">
@@ -48,6 +48,15 @@ export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivac
                     </button>
 
                     <div className="w-px h-6 bg-gray-200 dark:bg-gray-800" />
+
+                    {/* Guide Link */}
+                    <Link
+                        to="/guide"
+                        className="flex items-center gap-2 px-4 py-2 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all rounded-xl"
+                    >
+                        <BookOpen className="w-4 h-4" />
+                        <span className="hidden sm:inline">사용 가이드</span>
+                    </Link>
 
                     {/* Sync / Login */}
                     {!isLoggedIn ? (
