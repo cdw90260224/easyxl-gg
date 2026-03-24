@@ -17,10 +17,12 @@ import {
     type ChartConfig 
 } from './services/aiService';
 import { saveSheet, listSheets, getSheet, deleteSheet, type SheetRecord } from './services/sheetService';
+import { saveAnalysisHistory, listAnalysisHistory, deleteAnalysisHistory, type AnalysisHistoryRecord } from './services/historyService';
 import SheetTabs from './components/SheetTabs';
 import { parseExcelWorkbook } from './utils/excelParser';
 import { processAndCompressImage } from './utils/imageHelper';
 import ErrorBoundary from './components/ErrorBoundary';
+import { supabase } from './lib/supabase';
 import { Routes, Route, Link } from 'react-router-dom';
 import Guide from './pages/Guide';
 import Privacy from './pages/Privacy';
@@ -44,6 +46,9 @@ export default function App() {
     const [isSaving, setIsSaving] = useState(false);
     const [activeTab, setActiveTab] = useState<'create' | 'edit'>('create');
     const [isGlobalDragging, setIsGlobalDragging] = useState(false);
+    const [user, setUser] = useState<any>(null);
+    const [history, setHistory] = useState<AnalysisHistoryRecord[]>([]);
+    const [showHistory, setShowHistory] = useState(false);
 
     // Multi-Sheet State
     const [sheets, setSheets] = useState<{ id: string; name: string; data: any[]; columns: string[] }[]>([]);
@@ -74,6 +79,37 @@ export default function App() {
         if (isDark) document.documentElement.classList.add('dark');
         else document.documentElement.classList.remove('dark');
     }, [isDark]);
+
+    useEffect(() => {
+        if (!supabase) return;
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setUser(session?.user ?? null);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setUser(session?.user ?? null);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
+
+    useEffect(() => {
+        if (user) {
+            loadHistory();
+        } else {
+            setHistory([]);
+        }
+    }, [user]);
+
+    const loadHistory = async () => {
+        if (!user) return;
+        try {
+            const data = await listAnalysisHistory(user.id);
+            setHistory(data);
+        } catch (err) {
+            console.error('History load error:', err);
+        }
+    };
 
     const handlePDFLoaded = (text: string) => {
         toast.info("PDF 텍스트 추출 완료! AI가 데이터를 구조화합니다.", { icon: '📄' });
@@ -106,7 +142,12 @@ export default function App() {
                 
                 handleMultiSheetsLoaded([newSheet]);
                 setAnalysis(result);
-                // Removed setActiveTab('edit') to keep user in current tab and show inline preview
+                
+                // Auto Search result saving if logged in
+                if (user) {
+                    saveAnalysisHistory(user.id, newSheet.name, dataWithIds).then(() => loadHistory());
+                }
+                
                 toast.success(`✨ ${images.length}장의 이미지 병합 데이터를 성공적으로 표로 반환했습니다!`);
             } else {
                 toast.error("이미지에서 유효한 표 데이터를 찾지 못했습니다.");
@@ -205,6 +246,12 @@ export default function App() {
                     toast.success(`✨ 기존 데이터에 누락된 컬럼/조건이 성공적으로 병합되었습니다.`);
                 } else {
                     toast.success(`✨ ${result.generatedData.length}행의 데이터를 AI가 생성했습니다.`);
+                }
+
+                // Auto saving if logged in
+                if (user) {
+                    const fileName = sheets[activeSheetIndex]?.name || `AI_Generated_${Date.now()}`;
+                    saveAnalysisHistory(user.id, fileName, dataWithIds).then(() => loadHistory());
                 }
             } else if (result.intent === 'chart' && result.chartConfig) {
                 setChartConfig(result.chartConfig);
@@ -537,6 +584,25 @@ export default function App() {
         }
     };
 
+    const handleLoadHistoryItem = (item: AnalysisHistoryRecord) => {
+        const dataWithIds = item.data.map((row: any, idx: number) => ({
+            ...row,
+            _id: row._id || `his_${idx}_${Date.now()}`
+        }));
+        const columns = dataWithIds.length > 0 ? Object.keys(dataWithIds[0]).filter((k: string) => k !== '_id') : [];
+        
+        const newSheet = { 
+            id: `history_${item.id}`, 
+            name: `${item.file_name} (History)`, 
+            data: dataWithIds, 
+            columns 
+        };
+        
+        handleMultiSheetsLoaded([newSheet]);
+        setShowHistory(false);
+        toast.success(`📂 과거 이력("${item.file_name}")을 불러왔습니다!`);
+    };
+
     const hasData = data.length > 0;
 
     const suggestedQueries = activeTab === 'create'
@@ -653,6 +719,8 @@ export default function App() {
                 isPrivacyMode={isPrivacyMode}
                 togglePrivacyMode={() => setIsPrivacyMode(!isPrivacyMode)}
                 onShowPrivacyPolicy={() => setIsPrivacyModalOpen(true)}
+                user={user}
+                onShowHistory={() => setShowHistory(true)}
             />
 
             <Routes>
@@ -930,6 +998,47 @@ export default function App() {
                                 </div>
                             </div>
                         )}
+
+                        {/* ── 분석 히스토리 목록 ── */}
+                        {showHistory && history.length > 0 && (
+                            <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in-95 duration-300">
+                                <div className="flex items-center justify-between mb-4">
+                                    <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        최근 분석 이력 ({history.length})
+                                    </h3>
+                                    <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                    </button>
+                                </div>
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                    {history.map(item => (
+                                        <div key={item.id} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#262626] border border-transparent hover:border-blue-500/50 transition-all cursor-pointer group" onClick={() => handleLoadHistoryItem(item)}>
+                                            <div className="flex-1 overflow-hidden">
+                                                <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{item.file_name}</span>
+                                                <span className="text-xs text-gray-400">
+                                                    {new Date(item.created_at).toLocaleString('ko-KR')} · {item.data.length}행
+                                                </span>
+                                            </div>
+                                            <button
+                                                onClick={async (e) => {
+                                                    e.stopPropagation();
+                                                    if (!confirm('이 이력을 삭제하시겠습니까?')) return;
+                                                    try {
+                                                        await deleteAnalysisHistory(item.id);
+                                                        setHistory(prev => prev.filter(h => h.id !== item.id));
+                                                        toast.success('분석 이력이 삭제되었습니다.');
+                                                    } catch { toast.error('삭제 실패'); }
+                                                }}
+                                                className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        ) }
                     </div>
                 )}
             </main>

@@ -1,28 +1,12 @@
-import { Moon, Sun, Shield, ShieldAlert, FileSpreadsheet, BookOpen } from 'lucide-react';
+import { Moon, Sun, Shield, ShieldAlert, FileSpreadsheet, BookOpen, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 
-export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivacyPolicy }: any) {
+export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivacyPolicy, user, onShowHistory }: any) {
     const [isSyncing, setIsSyncing] = useState(false);
-    const [isLoggedIn, setIsLoggedIn] = useState(false);
-    const [user, setUser] = useState<any>(null);
-
-    useEffect(() => {
-        if (!supabase) return;
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setUser(session?.user ?? null);
-            setIsLoggedIn(!!session?.user);
-        });
-
-        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setUser(session?.user ?? null);
-            setIsLoggedIn(!!session?.user);
-        });
-
-        return () => subscription.unsubscribe();
-    }, []);
+    const isLoggedIn = !!user;
 
     const handleLogin = async () => {
         if (!supabase) return toast.error("Supabase 연결이 필요합니다.");
@@ -103,6 +87,14 @@ export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivac
                                     {user?.user_metadata?.full_name || '사용자'}님
                                 </span>
                             </div>
+                            <button
+                                onClick={onShowHistory}
+                                className="flex items-center gap-2 px-3 py-2 text-sm font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-gray-800 transition-all rounded-xl border border-gray-200 dark:border-gray-800"
+                                title="최근 분석 이력"
+                            >
+                                <Clock className="w-4 h-4 text-blue-500" />
+                                <span className="hidden md:inline">히스토리</span>
+                            </button>
                             <button
                                 onClick={handleSync}
                                 disabled={isSyncing}
