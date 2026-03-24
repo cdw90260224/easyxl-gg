@@ -1073,6 +1073,10 @@ export default function App() {
                             서비스 소개
                         </Link>
                         <span className="text-gray-300 dark:text-gray-700">|</span>
+                        <Link to="/guide" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                            사용 가이드
+                        </Link>
+                        <span className="text-gray-300 dark:text-gray-700">|</span>
                         <Link to="/support" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
                             고객 지원
                         </Link>
