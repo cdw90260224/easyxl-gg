@@ -55,9 +55,9 @@ export default function About() {
 
                 {/* Hero */}
                 <header className="text-center space-y-4">
-                    <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight leading-tight">
+                    <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white tracking-tight leading-loose">
                         EasyXL: 데이터 분석의<br />
-                        <span className="text-indigo-600 dark:text-indigo-400">새로운 패러다임을 열다</span>
+                        <span className="text-xl sm:text-2xl text-indigo-600 dark:text-indigo-400">새로운 패러다임을 열다</span>
                     </h1>
                     <p className="text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto leading-relaxed">
                         AI 기술로 데이터 격차를 해소하고, 모두에게 데이터의 주권을 돌려드립니다.
