@@ -23,6 +23,7 @@ import ErrorBoundary from './components/ErrorBoundary';
 import { Routes, Route, Link } from 'react-router-dom';
 import Guide from './pages/Guide';
 import Privacy from './pages/Privacy';
+import About from './pages/About';
 import CookieBanner from './components/CookieBanner';
 
 export default function App() {
@@ -944,11 +945,16 @@ export default function App() {
         } />
         <Route path="/guide" element={<Guide />} />
         <Route path="/privacy" element={<Privacy />} />
+        <Route path="/about" element={<About />} />
     </Routes>
 
     {/* Global Footer */}
     <footer className="w-full py-8 border-t border-gray-200 dark:border-gray-800 bg-slate-50 dark:bg-[#0f0f12]">
-        <div className="container mx-auto px-4 text-center">
+        <div className="container mx-auto px-4 flex items-center justify-center gap-6 flex-wrap">
+            <Link to="/about" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                서비스 소개
+            </Link>
+            <span className="text-gray-200 dark:text-gray-700">|</span>
             <Link to="/privacy" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
                 개인정보처리방침
             </Link>
