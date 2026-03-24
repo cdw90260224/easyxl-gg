@@ -9,15 +9,16 @@ import AIChartPanel from './components/AIChartPanel';
 import PrivacyModal from './components/PrivacyModal';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx-js-style';
-import { 
-    processNaturalLanguageQuery, 
+import {
+    processNaturalLanguageQuery,
     processImagesToGrid,
-    type AIAnalysisResult, 
-    type SelectionContext, 
-    type ChartConfig 
+    type AIAnalysisResult,
+    type SelectionContext,
+    type ChartConfig
 } from './services/aiService';
 import { saveSheet, listSheets, getSheet, deleteSheet, type SheetRecord } from './services/sheetService';
-import { saveAnalysisHistory, listAnalysisHistory, deleteAnalysisHistory, type AnalysisHistoryRecord } from './services/historyService';
+import { listAnalysisHistory, deleteAnalysisHistory, type AnalysisHistoryRecord } from './services/historyService';
+import { saveAnalysisResult } from './services/databaseService';
 import SheetTabs from './components/SheetTabs';
 import { parseExcelWorkbook } from './utils/excelParser';
 import { processAndCompressImage } from './utils/imageHelper';
@@ -117,37 +118,35 @@ export default function App() {
         handleSearch(`다음 PDF 텍스트 내용을 바탕으로 핵심 데이터를 추출해서 표(Table) 형태로 만들어줘:\n\n${text}`);
     };
 
-    const handleImagesLoaded = async (images: {base64: string, mimeType: string}[]) => {
+    const handleImagesLoaded = async (images: { base64: string, mimeType: string }[]) => {
         setIsLoading(true);
         setAnalysis(null);
         try {
             toast.loading(`${images.length}장의 이미지 통합 분석 진행 중...`, { id: 'image-ocr' });
             const result = await processImagesToGrid(images);
             toast.dismiss('image-ocr');
-            
+
             if (result.intent === 'generation' && result.generatedData) {
                 const dataWithIds = result.generatedData.map((row: any, idx: number) => ({
                     ...row,
                     _id: `img_${idx}_${Date.now()}`
                 }));
-                
+
                 // Add as a new sheet
                 const cols = Object.keys(result.generatedData[0] || {}).filter(k => k !== '_id');
-                const newSheet = { 
-                    id: `sheet_${Date.now()}`, 
-                    name: `Merged Image Data ${sheets.length + 1}`, 
-                    data: dataWithIds, 
-                    columns: cols 
+                const newSheet = {
+                    id: `sheet_${Date.now()}`,
+                    name: `Merged Image Data ${sheets.length + 1}`,
+                    data: dataWithIds,
+                    columns: cols
                 };
-                
+
                 handleMultiSheetsLoaded([newSheet]);
                 setAnalysis(result);
-                
+
                 // Auto Search result saving if logged in
-                if (user) {
-                    saveAnalysisHistory(user.id, newSheet.name, dataWithIds).then(() => loadHistory());
-                }
-                
+                saveAnalysisResult(newSheet.name, dataWithIds).then(() => loadHistory());
+
                 toast.success(`✨ ${images.length}장의 이미지 병합 데이터를 성공적으로 표로 반환했습니다!`);
             } else {
                 toast.error("이미지에서 유효한 표 데이터를 찾지 못했습니다.");
@@ -174,7 +173,7 @@ export default function App() {
         });
 
         // Set the first of the new sheets as active
-        const newIndex = sheets.length; 
+        const newIndex = sheets.length;
         setActiveSheetIndex(newIndex);
         setData(newSheets[0].data);
         setFilteredData(newSheets[0].data);
@@ -203,9 +202,9 @@ export default function App() {
                 }
                 selectionContext = { selectedData, rangeCoords: selectedRange };
             }
-            const sheetContexts = sheets.map((s: { id: string; name: string; columns: string[]; data: any[] }) => ({ 
-                id: s.id, 
-                name: s.name, 
+            const sheetContexts = sheets.map((s: { id: string; name: string; columns: string[]; data: any[] }) => ({
+                id: s.id,
+                name: s.name,
                 columns: s.columns,
                 dataSample: s.data.slice(0, 3) // Pass first 3 rows as sample
             }));
@@ -218,7 +217,7 @@ export default function App() {
                 }
 
                 let finalData = result.generatedData;
-                
+
                 // Partial Update Logic
                 const isPartialMerge = data.length > 0 && finalData.length === data.length;
 
@@ -241,7 +240,7 @@ export default function App() {
                     arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: dataWithIds, columns: cols };
                     return arr;
                 });
-                
+
                 if (isPartialMerge) {
                     toast.success(`✨ 기존 데이터에 누락된 컬럼/조건이 성공적으로 병합되었습니다.`);
                 } else {
@@ -249,10 +248,8 @@ export default function App() {
                 }
 
                 // Auto saving if logged in
-                if (user) {
-                    const fileName = sheets[activeSheetIndex]?.name || `AI_Generated_${Date.now()}`;
-                    saveAnalysisHistory(user.id, fileName, dataWithIds).then(() => loadHistory());
-                }
+                const fileName = sheets[activeSheetIndex]?.name || `AI_Generated_${Date.now()}`;
+                saveAnalysisResult(fileName, dataWithIds).then(() => loadHistory());
             } else if (result.intent === 'chart' && result.chartConfig) {
                 setChartConfig(result.chartConfig);
                 toast.success(`📊 ${result.chartConfig.chartType.toUpperCase()} 차트를 생성했습니다.`);
@@ -260,7 +257,7 @@ export default function App() {
                 const { targetSheetId, sourceSheetId, targetKey, sourceKey, columnsToCopy } = result.joinConfig;
                 const sourceSheet = sheets.find((s: { id: string; name: string; data: any[]; columns: string[] }) => s.id === sourceSheetId);
                 const targetSheet = sheets.find((s: { id: string; name: string; data: any[]; columns: string[] }) => s.id === targetSheetId);
-                
+
                 if (sourceSheet && targetSheet) {
                     const lookupMap = new Map();
                     sourceSheet.data.forEach((row: any) => {
@@ -273,20 +270,20 @@ export default function App() {
                         const sourceRow = lookupMap.get(keyVal);
                         if (sourceRow) {
                             const newRow = { ...row };
-                            columnsToCopy.forEach((col: string) => { if(sourceRow[col] !== undefined) newRow[col] = sourceRow[col]; });
+                            columnsToCopy.forEach((col: string) => { if (sourceRow[col] !== undefined) newRow[col] = sourceRow[col]; });
                             return newRow;
                         }
                         return row;
                     });
-                    
+
                     setData(newData); setFilteredData(newData);
-                    
+
                     setSheets(prev => {
                         const arr = [...prev];
                         arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: newData };
                         return arr;
                     });
-                    
+
                     toast.success(`✨ VLOOKUP 완료: ${sourceSheet.name} 데이터 병합됨`);
                 } else {
                     toast.error('지정된 시트를 찾을 수 없습니다.');
@@ -295,7 +292,7 @@ export default function App() {
                 const newData = data.map((row: any, ri: number) => {
                     const rowUpdates = result.updates!.filter(u => u.row === ri);
                     if (rowUpdates.length === 0) return row;
-                    
+
                     const updated = { ...row };
                     rowUpdates.forEach((upd: { col?: number; columnName?: string; value: any }) => {
                         const colName = upd.columnName || (upd.col !== undefined ? columns[upd.col] : undefined);
@@ -347,15 +344,15 @@ export default function App() {
                         const valB = String(b[column] ?? '').replace(/,/g, '');
                         const numA = parseFloat(valA);
                         const numB = parseFloat(valB);
-                        
+
                         if (!isNaN(numA) && !isNaN(numB)) {
                             return direction === 'asc' ? numA - numB : numB - numA;
                         }
-                        return direction === 'asc' 
+                        return direction === 'asc'
                             ? String(valA).localeCompare(String(valB))
                             : String(valB).localeCompare(String(valA));
                     });
-                    
+
                     setData(sorted);
                     setFilteredData(sorted);
                     setSheets(prev => {
@@ -401,10 +398,10 @@ export default function App() {
     const handleExport = () => {
         try {
             if (data.length === 0) { toast.warning('내보낼 데이터가 없습니다.'); return; }
-            
+
             const keys = Object.keys(data[0]).filter(k => k !== '_id');
             const isAutoGeneratedHeader = keys.length > 0 && keys.every((k: string) => k.match(/^[A-Z]$/));
-            
+
             const aoa: any[][] = [];
             const headerRows: number[] = [];
 
@@ -413,25 +410,25 @@ export default function App() {
                 aoa.push(keys);
                 // The first row (keys) is technically a header, but maybe not a "section header"
                 // Usually we want the real headers to be styled too
-                headerRows.push(0); 
+                headerRows.push(0);
             }
 
             // Helper to check if a row is a section header (consistent with InteractiveGrid)
             const isHeaderRow = (row: any) => {
                 const cellValue = String(row[keys[0]] || '');
                 const hasOnlyOneValue = keys.filter((k: string) => String(row[k] || '').trim() !== '').length === 1;
-                return hasOnlyOneValue || 
-                       cellValue.includes('전월대비') || 
-                       cellValue.includes('일별') || 
-                       cellValue.includes('성과') || 
-                       cellValue.includes('요약') || 
-                       cellValue.includes('제안') || 
-                       cellValue.includes('키워드');
+                return hasOnlyOneValue ||
+                    cellValue.includes('전월대비') ||
+                    cellValue.includes('일별') ||
+                    cellValue.includes('성과') ||
+                    cellValue.includes('요약') ||
+                    cellValue.includes('제안') ||
+                    cellValue.includes('키워드');
             };
 
             data.forEach((row: any, i: number) => {
                 const isSectionHeader = isHeaderRow(row);
-                
+
                 // Insert 2 empty rows before a section header, except for the very first row of the data
                 // If we already have a header row (aoa.length > 0), i > 0 is still correct
                 if (isSectionHeader && i > 0) {
@@ -462,8 +459,8 @@ export default function App() {
                     if (!ws[address]) ws[address] = { t: 's', v: '' }; // Ensure cell object exists
 
                     ws[address].s = {
-                        alignment: { 
-                            wrapText: true, 
+                        alignment: {
+                            wrapText: true,
                             vertical: 'center',
                             horizontal: 'left',
                             indent: 1 // Add slight horizontal indent for readability
@@ -506,11 +503,11 @@ export default function App() {
             const wb = XLSX.utils.book_new();
             XLSX.utils.book_append_sheet(wb, ws, 'Report');
             XLSX.writeFile(wb, `easyxl_report_${new Date().getTime()}.xlsx`);
-            
+
             toast.success('✨ 가독성이 개선된 엑셀 보고서를 내보냈습니다!');
-        } catch (err) { 
+        } catch (err) {
             console.error('Export error:', err);
-            toast.error('내보내기 중 오류가 발생했습니다.'); 
+            toast.error('내보내기 중 오류가 발생했습니다.');
         }
     };
 
@@ -590,14 +587,14 @@ export default function App() {
             _id: row._id || `his_${idx}_${Date.now()}`
         }));
         const columns = dataWithIds.length > 0 ? Object.keys(dataWithIds[0]).filter((k: string) => k !== '_id') : [];
-        
-        const newSheet = { 
-            id: `history_${item.id}`, 
-            name: `${item.file_name} (History)`, 
-            data: dataWithIds, 
-            columns 
+
+        const newSheet = {
+            id: `history_${item.id}`,
+            name: `${item.file_name} (History)`,
+            data: dataWithIds,
+            columns
         };
-        
+
         handleMultiSheetsLoaded([newSheet]);
         setShowHistory(false);
         toast.success(`📂 과거 이력("${item.file_name}")을 불러왔습니다!`);
@@ -632,7 +629,7 @@ export default function App() {
         e.preventDefault();
         e.stopPropagation();
         setIsGlobalDragging(false);
-        
+
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0) handleFilesSelected(files);
     };
@@ -692,7 +689,7 @@ export default function App() {
     };
 
     return (
-        <div 
+        <div
             className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0f0f12] transition-colors duration-500 font-sans relative"
             onDragOver={handleDragOver}
             onDragLeave={handleDragLeave}
@@ -726,370 +723,370 @@ export default function App() {
             <Routes>
                 <Route path="/" element={
                     <main className="flex-1 flex flex-col items-center pt-12 px-4 pb-20 space-y-8">
-                {/* ── 상단: 타이틀 + 검색바 (항상 표시) ── */}
-                <div className="w-full max-w-4xl space-y-8 text-center">
-                    {/* Center Tab Bar */}
-                    <div className="flex justify-center animate-in fade-in slide-in-from-top-2 duration-500">
-                        <div className="flex p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner">
-                            <button
-                                onClick={() => setActiveTab('create')}
-                                className={`px-8 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'create'
-                                    ? 'bg-white dark:bg-[#1a1a1a] text-deepblue-600 shadow-md transform scale-[1.02]'
-                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                                    }`}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                                엑셀 생성
-                            </button>
-                            <button
-                                onClick={() => setActiveTab('edit')}
-                                className={`px-8 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'edit'
-                                    ? 'bg-white dark:bg-[#1a1a1a] text-deepblue-600 shadow-md transform scale-[1.02]'
-                                    : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
-                                    }`}
-                            >
-                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>
-                                엑셀 수정
-                            </button>
-                        </div>
-                    </div>
-
-                    <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-700">
-                        <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
-                            당신의 엑셀, <span className="text-deepblue-600 dark:text-deepblue-400">일상언어로 완벽하게 제어하세요</span>
-                        </h2>
-                        <p className="text-base text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
-                            {activeTab === 'create'
-                                ? "파일 없이도 당신이 원하는 데이터를 AI가 즉시 생성하고 구성해 드립니다."
-                                : "기존 엑셀 데이터를 업로드하고 복잡한 수식 없이 말로만 데이터를 가공하세요."}
-                        </p>
-                    </div>
-
-                    <SearchBar
-                        value={searchQuery}
-                        onChange={setSearchQuery}
-                        onSearch={(q) => {
-                            handleSearch(q);
-                        }}
-                        onFilesSelected={handleFilesSelected}
-                    />
-
-                    <div className="flex flex-wrap items-center justify-center gap-2">
-                        <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-2 uppercase tracking-wider">Suggested:</span>
-                        {suggestedQueries.map((q, idx) => (
-                            <button
-                                key={idx}
-                                onClick={() => { setSearchQuery(q); handleSearch(q); }}
-                                className="px-4 py-1.5 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:border-indigo-500 hover:text-indigo-500 transition-all shadow-sm"
-                            >
-                                {q}
-                            </button>
-                        ))}
-                    </div>
-                </div>
-
-                {/* ── 멀티 시트 탭 (시트가 1개 이상이거나 빈 새 시트를 대기중일 때 항상 표시) ── */}
-                {sheets.length > 0 && (
-                    <div className="w-full max-w-6xl animate-in fade-in slide-in-from-bottom-2 duration-300">
-                        <SheetTabs 
-                            sheets={sheets} 
-                            activeSheetIndex={activeSheetIndex} 
-                            onSelect={(i) => {
-                                // 1. 즉각적인 데이터 반영 (0.1초 미만)
-                                setSheets(prev => { 
-                                    const arr = [...prev]; 
-                                    if(arr[activeSheetIndex]) arr[activeSheetIndex].data = data; 
-                                    return arr; 
-                                });
-                                setActiveSheetIndex(i); 
-                                setData(sheets[i].data); 
-                                setFilteredData(sheets[i].data);
-                                
-                                // 2. AI 브레인 동기화 알림
-                                setAnalysis(null); 
-                                setChartConfig(null); 
-                                setSelectedRange(null);
-                                toast.info(`🤖 AI 브레인이 '${sheets[i].name}' 시트로 이동했습니다.`, { icon: '🧠' });
-                            }} 
-                            onDelete={handleDeleteSheet} 
-                            onAdd={() => {
-                                const nextIndex = sheets.length;
-                                setSheets(prev => { 
-                                    const arr = [...prev]; 
-                                    if(arr[activeSheetIndex]) arr[activeSheetIndex].data = data; 
-                                    arr.push({ id: `sheet_${Date.now()}`, name: `Sheet ${arr.length + 1}`, data: [], columns: [] });
-                                    return arr; 
-                                });
-                                setActiveSheetIndex(nextIndex);
-                                setData([]); setFilteredData([]); setAnalysis(null); setChartConfig(null); setSelectedRange(null);
-                            }} 
-                        />
-                    </div>
-                )}
-
-                {/* ── 업로드존: '수정' 모드이면서 데이터가 없을 때만 표시 ── */}
-                {activeTab === 'edit' && !hasData && (
-                    <div className="w-full max-w-3xl animate-in fade-in zoom-in-95 duration-500">
-                        <UploadZone 
-                            onSheetsLoaded={handleMultiSheetsLoaded} 
-                            onPDFLoaded={handlePDFLoaded} 
-                            onImagesLoaded={handleImagesLoaded}
-                        />
-                    </div>
-                )}
-
-                {/* ── 생성 모드 안내 (데이터가 없을 때) ── */}
-                {activeTab === 'create' && !hasData && (
-                    <div className="flex flex-col items-center justify-center p-20 text-center space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-1000">
-                        <div className="w-16 h-16 bg-deepblue-50 dark:bg-deepblue-500/10 rounded-3xl flex items-center justify-center mb-2">
-                             <span className="text-3xl">✨</span>
-                        </div>
-                        <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">AI와 함께 새로운 엑셀을 만들어보세요</h3>
-                        <p className="text-gray-500 dark:text-gray-400 max-w-md">
-                            검색창에 만들고 싶은 데이터를 입력하거나,<br/>아래의 추천 키워드를 클릭해보세요.
-                        </p>
-                    </div>
-                )}
-
-                {/* ── 로딩 스피너 ── */}
-                {isLoading && (
-                    <div className="flex flex-col items-center justify-center p-12 space-y-4">
-                        <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
-                        <p className="text-gray-500 font-medium animate-pulse">AI가 데이터를 분석하는 중입니다...</p>
-                    </div>
-                )}
-
-                {/* ── 분석 결과 카드 ── */}
-                {!isLoading && analysis && (
-                    <div className="w-full max-w-6xl animate-in fade-in zoom-in-95 duration-500">
-                        <AnalysisCard analysis={analysis} />
-                    </div>
-                )}
-
-                {/* ── Talk-to-Chart 패널 ── */}
-                {!isLoading && chartConfig && hasData && (
-                    <div className="w-full max-w-6xl animate-in fade-in zoom-in-95 duration-500">
-                        <AIChartPanel
-                            data={filteredData}
-                            chartConfig={chartConfig}
-                            onClose={() => setChartConfig(null)}
-                        />
-                    </div>
-                )}
-
-                {/* ── 데이터가 있을 때만: AI 인사이트 + 그리드 ── */}
-                {hasData && (
-                    <div className="w-full max-w-6xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
-                        <AnalyticsDashboard data={filteredData} />
-
-                        <div className="shadow-2xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1a1a1a]">
-                            <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
-                                <div className="flex flex-col gap-1">
-                                    <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                        <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
-                                        Interactive AI Grid
-                                        <span className="text-xs font-normal text-gray-400 ml-1">
-                                            ({filteredData.length}행 / 전체 {data.length}행)
-                                        </span>
-                                    </h3>
-                                    {selectedRange && (
-                                        <span className="text-[10px] text-indigo-500 font-mono">
-                                            Selection: Row {selectedRange.startRow + 1}–{selectedRange.endRow + 1}, Col {selectedRange.startCol + 1}–{selectedRange.endCol + 1}
-                                        </span>
-                                    )}
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg text-[10px] text-amber-700 dark:text-amber-400 font-medium animate-in fade-in slide-in-from-right-2 duration-700">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>
-                                        내보내기 시 원본 데이터가 모두 포함됩니다
-                                    </div>
-                                    {filteredData.length < data.length && (
-                                        <button
-                                            onClick={() => { setFilteredData(data); setAnalysis(null); toast.info('필터가 해제되었습니다.'); }}
-                                            className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-xl hover:border-indigo-500 hover:text-indigo-500 transition-all"
-                                        >
-                                            필터 해제
-                                        </button>
-                                    )}
+                        {/* ── 상단: 타이틀 + 검색바 (항상 표시) ── */}
+                        <div className="w-full max-w-4xl space-y-8 text-center">
+                            {/* Center Tab Bar */}
+                            <div className="flex justify-center animate-in fade-in slide-in-from-top-2 duration-500">
+                                <div className="flex p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner">
                                     <button
-                                        onClick={handleExport}
-                                        className="flex items-center gap-2 px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-green-600/30 active:scale-95"
+                                        onClick={() => setActiveTab('create')}
+                                        className={`px-8 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'create'
+                                            ? 'bg-white dark:bg-[#1a1a1a] text-deepblue-600 shadow-md transform scale-[1.02]'
+                                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                            }`}
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
-                                        Export Excel
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                                        엑셀 생성
                                     </button>
                                     <button
-                                        onClick={handleSaveToDb}
-                                        disabled={isSaving}
-                                        className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/30 active:scale-95 disabled:opacity-50"
+                                        onClick={() => setActiveTab('edit')}
+                                        className={`px-8 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'edit'
+                                            ? 'bg-white dark:bg-[#1a1a1a] text-deepblue-600 shadow-md transform scale-[1.02]'
+                                            : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
+                                            }`}
                                     >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
-                                        {isSaving ? '저장 중...' : 'DB 저장'}
-                                    </button>
-                                    <button
-                                        onClick={handleLoadSheetList}
-                                        className="flex items-center gap-2 px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-600/30 active:scale-95"
-                                    >
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
-                                        내 시트
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z" /></svg>
+                                        엑셀 수정
                                     </button>
                                 </div>
                             </div>
 
-                            <ErrorBoundary>
-                                <InteractiveGrid
-                                    data={filteredData}
-                                    onSelectionChange={(r: number, c: number, r2: number, c2: number) => setSelectedRange({ startRow: r, startCol: c, endRow: r2, endCol: c2 })}
-                                    onDataChange={(updatedFilteredData: any[]) => {
-                                        // 필터링된 데이터의 변경사항을 원본 데이터(data)에 병합
-                                        const newData = data.map(originalRow => {
-                                            const found = updatedFilteredData.find(u => u._id === originalRow._id);
-                                            return found ? found : originalRow;
+                            <div className="space-y-3 animate-in fade-in slide-in-from-top-4 duration-700">
+                                <h2 className="text-3xl sm:text-4xl font-extrabold tracking-tight text-gray-900 dark:text-white">
+                                    당신의 엑셀, <span className="text-deepblue-600 dark:text-deepblue-400">일상언어로 완벽하게 제어하세요</span>
+                                </h2>
+                                <p className="text-base text-gray-500 dark:text-gray-400 max-w-2xl mx-auto">
+                                    {activeTab === 'create'
+                                        ? "파일 없이도 당신이 원하는 데이터를 AI가 즉시 생성하고 구성해 드립니다."
+                                        : "기존 엑셀 데이터를 업로드하고 복잡한 수식 없이 말로만 데이터를 가공하세요."}
+                                </p>
+                            </div>
+
+                            <SearchBar
+                                value={searchQuery}
+                                onChange={setSearchQuery}
+                                onSearch={(q) => {
+                                    handleSearch(q);
+                                }}
+                                onFilesSelected={handleFilesSelected}
+                            />
+
+                            <div className="flex flex-wrap items-center justify-center gap-2">
+                                <span className="text-xs font-semibold text-gray-400 dark:text-gray-500 mr-2 uppercase tracking-wider">Suggested:</span>
+                                {suggestedQueries.map((q, idx) => (
+                                    <button
+                                        key={idx}
+                                        onClick={() => { setSearchQuery(q); handleSearch(q); }}
+                                        className="px-4 py-1.5 bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-full text-sm text-gray-600 dark:text-gray-300 hover:border-indigo-500 hover:text-indigo-500 transition-all shadow-sm"
+                                    >
+                                        {q}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+
+                        {/* ── 멀티 시트 탭 (시트가 1개 이상이거나 빈 새 시트를 대기중일 때 항상 표시) ── */}
+                        {sheets.length > 0 && (
+                            <div className="w-full max-w-6xl animate-in fade-in slide-in-from-bottom-2 duration-300">
+                                <SheetTabs
+                                    sheets={sheets}
+                                    activeSheetIndex={activeSheetIndex}
+                                    onSelect={(i) => {
+                                        // 1. 즉각적인 데이터 반영 (0.1초 미만)
+                                        setSheets(prev => {
+                                            const arr = [...prev];
+                                            if (arr[activeSheetIndex]) arr[activeSheetIndex].data = data;
+                                            return arr;
                                         });
-                                        setData(newData); 
-                                        setFilteredData(updatedFilteredData); 
+                                        setActiveSheetIndex(i);
+                                        setData(sheets[i].data);
+                                        setFilteredData(sheets[i].data);
+
+                                        // 2. AI 브레인 동기화 알림
+                                        setAnalysis(null);
+                                        setChartConfig(null);
+                                        setSelectedRange(null);
+                                        toast.info(`🤖 AI 브레인이 '${sheets[i].name}' 시트로 이동했습니다.`, { icon: '🧠' });
+                                    }}
+                                    onDelete={handleDeleteSheet}
+                                    onAdd={() => {
+                                        const nextIndex = sheets.length;
+                                        setSheets(prev => {
+                                            const arr = [...prev];
+                                            if (arr[activeSheetIndex]) arr[activeSheetIndex].data = data;
+                                            arr.push({ id: `sheet_${Date.now()}`, name: `Sheet ${arr.length + 1}`, data: [], columns: [] });
+                                            return arr;
+                                        });
+                                        setActiveSheetIndex(nextIndex);
+                                        setData([]); setFilteredData([]); setAnalysis(null); setChartConfig(null); setSelectedRange(null);
                                     }}
                                 />
-                            </ErrorBoundary>
+                            </div>
+                        )}
 
-                        </div>
+                        {/* ── 업로드존: '수정' 모드이면서 데이터가 없을 때만 표시 ── */}
+                        {activeTab === 'edit' && !hasData && (
+                            <div className="w-full max-w-3xl animate-in fade-in zoom-in-95 duration-500">
+                                <UploadZone
+                                    onSheetsLoaded={handleMultiSheetsLoaded}
+                                    onPDFLoaded={handlePDFLoaded}
+                                    onImagesLoaded={handleImagesLoaded}
+                                />
+                            </div>
+                        )}
 
-                        {/* 하단 여백용 */}
-                        <div className="h-4"></div>
-                    </div>
-                )}
+                        {/* ── 생성 모드 안내 (데이터가 없을 때) ── */}
+                        {activeTab === 'create' && !hasData && (
+                            <div className="flex flex-col items-center justify-center p-20 text-center space-y-4 animate-in fade-in slide-in-from-bottom-4 duration-1000">
+                                <div className="w-16 h-16 bg-deepblue-50 dark:bg-deepblue-500/10 rounded-3xl flex items-center justify-center mb-2">
+                                    <span className="text-3xl">✨</span>
+                                </div>
+                                <h3 className="text-xl font-bold text-gray-900 dark:text-gray-100">AI와 함께 새로운 엑셀을 만들어보세요</h3>
+                                <p className="text-gray-500 dark:text-gray-400 max-w-md">
+                                    검색창에 만들고 싶은 데이터를 입력하거나,<br />아래의 추천 키워드를 클릭해보세요.
+                                </p>
+                            </div>
+                        )}
 
-                {/* ── 분석 히스토리 목록 ── */}
-                {showHistory && (
-                    <div className="w-full max-w-6xl mx-auto bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-300 mb-10">
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                최근 분석 이력 {history.length > 0 && `(${history.length})`}
-                            </h3>
-                            <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-500">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                            </button>
-                        </div>
-                        
-                        {history.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {history.map(item => (
-                                    <div 
-                                        key={item.id} 
-                                        className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#262626] border border-transparent hover:border-blue-500/50 transition-all cursor-pointer group" 
-                                        onClick={() => handleLoadHistoryItem(item)}
-                                    >
-                                        <div className="flex-1 overflow-hidden">
-                                            <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{item.file_name}</span>
-                                            <span className="text-xs text-gray-400">
-                                                {new Date(item.created_at).toLocaleString('ko-KR')} · {item.data.length}행
-                                            </span>
+                        {/* ── 로딩 스피너 ── */}
+                        {isLoading && (
+                            <div className="flex flex-col items-center justify-center p-12 space-y-4">
+                                <div className="w-12 h-12 border-4 border-indigo-500/30 border-t-indigo-500 rounded-full animate-spin" />
+                                <p className="text-gray-500 font-medium animate-pulse">AI가 데이터를 분석하는 중입니다...</p>
+                            </div>
+                        )}
+
+                        {/* ── 분석 결과 카드 ── */}
+                        {!isLoading && analysis && (
+                            <div className="w-full max-w-6xl animate-in fade-in zoom-in-95 duration-500">
+                                <AnalysisCard analysis={analysis} />
+                            </div>
+                        )}
+
+                        {/* ── Talk-to-Chart 패널 ── */}
+                        {!isLoading && chartConfig && hasData && (
+                            <div className="w-full max-w-6xl animate-in fade-in zoom-in-95 duration-500">
+                                <AIChartPanel
+                                    data={filteredData}
+                                    chartConfig={chartConfig}
+                                    onClose={() => setChartConfig(null)}
+                                />
+                            </div>
+                        )}
+
+                        {/* ── 데이터가 있을 때만: AI 인사이트 + 그리드 ── */}
+                        {hasData && (
+                            <div className="w-full max-w-6xl space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+                                <AnalyticsDashboard data={filteredData} />
+
+                                <div className="shadow-2xl rounded-2xl border border-gray-200 dark:border-gray-800 overflow-hidden bg-white dark:bg-[#1a1a1a]">
+                                    <div className="flex items-center justify-between p-5 border-b border-gray-100 dark:border-gray-800 bg-gray-50/50 dark:bg-gray-900/50">
+                                        <div className="flex flex-col gap-1">
+                                            <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                                <span className="w-2 h-2 rounded-full bg-green-500 animate-pulse" />
+                                                Interactive AI Grid
+                                                <span className="text-xs font-normal text-gray-400 ml-1">
+                                                    ({filteredData.length}행 / 전체 {data.length}행)
+                                                </span>
+                                            </h3>
+                                            {selectedRange && (
+                                                <span className="text-[10px] text-indigo-500 font-mono">
+                                                    Selection: Row {selectedRange.startRow + 1}–{selectedRange.endRow + 1}, Col {selectedRange.startCol + 1}–{selectedRange.endCol + 1}
+                                                </span>
+                                            )}
                                         </div>
-                                        <button
-                                            onClick={async (e) => {
-                                                e.stopPropagation();
-                                                if (!confirm('이 이력을 삭제하시겠습니까?')) return;
-                                                try {
-                                                    await deleteAnalysisHistory(item.id);
-                                                    setHistory(prev => prev.filter(h => h.id !== item.id));
-                                                    toast.success('분석 이력이 삭제되었습니다.');
-                                                } catch { toast.error('삭제 실패'); }
-                                            }}
-                                            className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                                        </button>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-2 px-3 py-1.5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800/50 rounded-lg text-[10px] text-amber-700 dark:text-amber-400 font-medium animate-in fade-in slide-in-from-right-2 duration-700">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3Z" /><path d="M12 9v4" /><path d="M12 17h.01" /></svg>
+                                                내보내기 시 원본 데이터가 모두 포함됩니다
+                                            </div>
+                                            {filteredData.length < data.length && (
+                                                <button
+                                                    onClick={() => { setFilteredData(data); setAnalysis(null); toast.info('필터가 해제되었습니다.'); }}
+                                                    className="px-4 py-2 text-sm font-semibold text-gray-600 dark:text-gray-300 border border-gray-300 dark:border-gray-700 rounded-xl hover:border-indigo-500 hover:text-indigo-500 transition-all"
+                                                >
+                                                    필터 해제
+                                                </button>
+                                            )}
+                                            <button
+                                                onClick={handleExport}
+                                                className="flex items-center gap-2 px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-green-600/30 active:scale-95"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
+                                                Export Excel
+                                            </button>
+                                            <button
+                                                onClick={handleSaveToDb}
+                                                disabled={isSaving}
+                                                className="flex items-center gap-2 px-5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-indigo-600/30 active:scale-95 disabled:opacity-50"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" /><polyline points="17 21 17 13 7 13 7 21" /><polyline points="7 3 7 8 15 8" /></svg>
+                                                {isSaving ? '저장 중...' : 'DB 저장'}
+                                            </button>
+                                            <button
+                                                onClick={handleLoadSheetList}
+                                                className="flex items-center gap-2 px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-purple-600/30 active:scale-95"
+                                            >
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+                                                내 시트
+                                            </button>
+                                        </div>
                                     </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-12 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
-                                <div className="text-gray-400 mb-2">분석 이력이 아직 없습니다.</div>
-                                <div className="text-xs text-gray-500">이미지를 업로드하거나 AI에게 질문해 보세요!</div>
+
+                                    <ErrorBoundary>
+                                        <InteractiveGrid
+                                            data={filteredData}
+                                            onSelectionChange={(r: number, c: number, r2: number, c2: number) => setSelectedRange({ startRow: r, startCol: c, endRow: r2, endCol: c2 })}
+                                            onDataChange={(updatedFilteredData: any[]) => {
+                                                // 필터링된 데이터의 변경사항을 원본 데이터(data)에 병합
+                                                const newData = data.map(originalRow => {
+                                                    const found = updatedFilteredData.find(u => u._id === originalRow._id);
+                                                    return found ? found : originalRow;
+                                                });
+                                                setData(newData);
+                                                setFilteredData(updatedFilteredData);
+                                            }}
+                                        />
+                                    </ErrorBoundary>
+
+                                </div>
+
+                                {/* 하단 여백용 */}
+                                <div className="h-4"></div>
                             </div>
                         )}
-                    </div>
-                )}
 
-                {/* ── 저장된 시트 목록 ── */}
-                {showSavedSheets && (
-                    <div className="w-full max-w-6xl mx-auto bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-300 mb-10">
-                        <div className="flex items-center justify-between mb-6">
-                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
-                                저장된 시트 {savedSheets.length > 0 && `(${savedSheets.length})`}
-                            </h3>
-                            <button onClick={() => setShowSavedSheets(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-500">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                            </button>
-                        </div>
-                        {savedSheets.length > 0 ? (
-                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                                {savedSheets.map(sheet => (
-                                    <div key={sheet.id} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#262626] border border-transparent hover:border-purple-500/50 transition-all group">
-                                        <button
-                                            onClick={() => handleLoadSheet(sheet.id)}
-                                            className="flex-1 text-left"
-                                        >
-                                            <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{sheet.title}</span>
-                                            <span className="block text-xs text-gray-400 mt-1">
-                                                {new Date(sheet.created_at).toLocaleString('ko-KR')}
-                                            </span>
-                                        </button>
-                                        <button
-                                            onClick={async () => {
-                                                if (!confirm('시트를 삭제하시겠습니까?')) return;
-                                                try {
-                                                    await deleteSheet(sheet.id);
-                                                    setSavedSheets(prev => prev.filter(s => s.id !== sheet.id));
-                                                    toast.success('시트가 삭제되었습니다.');
-                                                } catch { toast.error('삭제 실패'); }
-                                            }}
-                                            className="opacity-0 group-hover:opacity-100 ml-3 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                                        >
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                                        </button>
+                        {/* ── 분석 히스토리 목록 ── */}
+                        {showHistory && (
+                            <div className="w-full max-w-6xl mx-auto bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-300 mb-10">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                        최근 분석 이력 {history.length > 0 && `(${history.length})`}
+                                    </h3>
+                                    <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-500">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                    </button>
+                                </div>
+
+                                {history.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {history.map(item => (
+                                            <div
+                                                key={item.id}
+                                                className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#262626] border border-transparent hover:border-blue-500/50 transition-all cursor-pointer group"
+                                                onClick={() => handleLoadHistoryItem(item)}
+                                            >
+                                                <div className="flex-1 overflow-hidden">
+                                                    <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{item.file_name}</span>
+                                                    <span className="text-xs text-gray-400">
+                                                        {new Date(item.created_at).toLocaleString('ko-KR')} · {item.data.length}행
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    onClick={async (e) => {
+                                                        e.stopPropagation();
+                                                        if (!confirm('이 이력을 삭제하시겠습니까?')) return;
+                                                        try {
+                                                            await deleteAnalysisHistory(item.id);
+                                                            setHistory(prev => prev.filter(h => h.id !== item.id));
+                                                            toast.success('분석 이력이 삭제되었습니다.');
+                                                        } catch { toast.error('삭제 실패'); }
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                                </button>
+                                            </div>
+                                        ))}
                                     </div>
-                                ))}
-                            </div>
-                        ) : (
-                            <div className="text-center py-12 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 text-gray-400">
-                                저장된 시트가 아직 없습니다.
+                                ) : (
+                                    <div className="text-center py-12 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
+                                        <div className="text-gray-400 mb-2">분석 이력이 아직 없습니다.</div>
+                                        <div className="text-xs text-gray-500">이미지를 업로드하거나 AI에게 질문해 보세요!</div>
+                                    </div>
+                                )}
                             </div>
                         )}
-                    </div>
-                )}
-            </main>
-        } />
-        <Route path="/guide" element={<Guide />} />
-        <Route path="/privacy" element={<Privacy />} />
-        <Route path="/about" element={<About />} />
-        <Route path="/support" element={<Support />} />
-    </Routes>
 
-    {/* Global Footer */}
-    <footer className="w-full py-8 border-t border-gray-200 dark:border-gray-800 bg-slate-50 dark:bg-[#0f0f12]">
-        <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-6 relative">
-            <div className="flex items-center gap-6 flex-wrap justify-center">
-                <Link to="/about" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
-                    서비스 소개
-                </Link>
-                <span className="text-gray-300 dark:text-gray-700">|</span>
-                <Link to="/support" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
-                    고객 지원
-                </Link>
-                <span className="text-gray-300 dark:text-gray-700">|</span>
-                <Link to="/privacy" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
-                    개인정보처리방침
-                </Link>
-            </div>
-            {/* AdSense Approval - Professional Copyright Placement */}
-            <p className="text-xs text-gray-400 dark:text-gray-600 mt-2 md:mt-0 md:absolute right-4">
-                © {new Date().getFullYear()} EasyXL.GG All rights reserved.
-            </p>
+                        {/* ── 저장된 시트 목록 ── */}
+                        {showSavedSheets && (
+                            <div className="w-full max-w-6xl mx-auto bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-300 mb-10">
+                                <div className="flex items-center justify-between mb-6">
+                                    <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+                                        저장된 시트 {savedSheets.length > 0 && `(${savedSheets.length})`}
+                                    </h3>
+                                    <button onClick={() => setShowSavedSheets(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-500">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                                    </button>
+                                </div>
+                                {savedSheets.length > 0 ? (
+                                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                        {savedSheets.map(sheet => (
+                                            <div key={sheet.id} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#262626] border border-transparent hover:border-purple-500/50 transition-all group">
+                                                <button
+                                                    onClick={() => handleLoadSheet(sheet.id)}
+                                                    className="flex-1 text-left"
+                                                >
+                                                    <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{sheet.title}</span>
+                                                    <span className="block text-xs text-gray-400 mt-1">
+                                                        {new Date(sheet.created_at).toLocaleString('ko-KR')}
+                                                    </span>
+                                                </button>
+                                                <button
+                                                    onClick={async () => {
+                                                        if (!confirm('시트를 삭제하시겠습니까?')) return;
+                                                        try {
+                                                            await deleteSheet(sheet.id);
+                                                            setSavedSheets(prev => prev.filter(s => s.id !== sheet.id));
+                                                            toast.success('시트가 삭제되었습니다.');
+                                                        } catch { toast.error('삭제 실패'); }
+                                                    }}
+                                                    className="opacity-0 group-hover:opacity-100 ml-3 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                                                >
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                                </button>
+                                            </div>
+                                        ))}
+                                    </div>
+                                ) : (
+                                    <div className="text-center py-12 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 text-gray-400">
+                                        저장된 시트가 아직 없습니다.
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </main>
+                } />
+                <Route path="/guide" element={<Guide />} />
+                <Route path="/privacy" element={<Privacy />} />
+                <Route path="/about" element={<About />} />
+                <Route path="/support" element={<Support />} />
+            </Routes>
+
+            {/* Global Footer */}
+            <footer className="w-full py-8 border-t border-gray-200 dark:border-gray-800 bg-slate-50 dark:bg-[#0f0f12]">
+                <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-6 relative">
+                    <div className="flex items-center gap-6 flex-wrap justify-center">
+                        <Link to="/about" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                            서비스 소개
+                        </Link>
+                        <span className="text-gray-300 dark:text-gray-700">|</span>
+                        <Link to="/support" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                            고객 지원
+                        </Link>
+                        <span className="text-gray-300 dark:text-gray-700">|</span>
+                        <Link to="/privacy" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                            개인정보처리방침
+                        </Link>
+                    </div>
+                    {/* AdSense Approval - Professional Copyright Placement */}
+                    <p className="text-xs text-gray-400 dark:text-gray-600 mt-2 md:mt-0 md:absolute right-4">
+                        © {new Date().getFullYear()} EasyXL.GG All rights reserved.
+                    </p>
+                </div>
+            </footer>
         </div>
-    </footer>
-</div>
     );
 }
