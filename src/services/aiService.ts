@@ -236,7 +236,7 @@ ${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(select
         },
         {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 20000
+            timeout: 60000
         }
     );
 
@@ -315,7 +315,7 @@ export const processImagesToGrid = async (
         },
         {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 30000
+            timeout: 180000
         }
     );
 

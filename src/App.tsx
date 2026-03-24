@@ -19,11 +19,13 @@ import {
 import { saveSheet, listSheets, getSheet, deleteSheet, type SheetRecord } from './services/sheetService';
 import SheetTabs from './components/SheetTabs';
 import { parseExcelWorkbook } from './utils/excelParser';
+import { processAndCompressImage } from './utils/imageHelper';
 import ErrorBoundary from './components/ErrorBoundary';
 import { Routes, Route, Link } from 'react-router-dom';
 import Guide from './pages/Guide';
 import Privacy from './pages/Privacy';
 import About from './pages/About';
+import Support from './pages/Support';
 import CookieBanner from './components/CookieBanner';
 
 export default function App() {
@@ -599,18 +601,7 @@ export default function App() {
     const handleImagesLoadedFromFiles = async (files: File[]) => {
         try {
             toast.loading(`${files.length}장의 이미지를 병합 준비 중...`);
-            const promises = files.map((file: File) => {
-                return new Promise<{base64: string, mimeType: string}>((resolve, reject) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => {
-                        const result = e.target?.result as string;
-                        const base64 = result.split(',')[1];
-                        resolve({ base64, mimeType: file.type || 'image/jpeg' });
-                    };
-                    reader.onerror = reject;
-                    reader.readAsDataURL(file);
-                });
-            });
+            const promises = files.map((file: File) => processAndCompressImage(file));
             const imageDataArray = await Promise.all(promises);
             toast.dismiss();
             handleImagesLoaded(imageDataArray);
@@ -946,18 +937,29 @@ export default function App() {
         <Route path="/guide" element={<Guide />} />
         <Route path="/privacy" element={<Privacy />} />
         <Route path="/about" element={<About />} />
+        <Route path="/support" element={<Support />} />
     </Routes>
 
     {/* Global Footer */}
     <footer className="w-full py-8 border-t border-gray-200 dark:border-gray-800 bg-slate-50 dark:bg-[#0f0f12]">
-        <div className="container mx-auto px-4 flex items-center justify-center gap-6 flex-wrap">
-            <Link to="/about" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
-                서비스 소개
-            </Link>
-            <span className="text-gray-200 dark:text-gray-700">|</span>
-            <Link to="/privacy" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
-                개인정보처리방침
-            </Link>
+        <div className="container mx-auto px-4 flex flex-col md:flex-row items-center justify-center gap-6 relative">
+            <div className="flex items-center gap-6 flex-wrap justify-center">
+                <Link to="/about" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                    서비스 소개
+                </Link>
+                <span className="text-gray-300 dark:text-gray-700">|</span>
+                <Link to="/support" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                    고객 지원
+                </Link>
+                <span className="text-gray-300 dark:text-gray-700">|</span>
+                <Link to="/privacy" className="text-sm font-medium text-gray-500 hover:text-gray-900 dark:text-gray-400 dark:hover:text-gray-100 transition-colors">
+                    개인정보처리방침
+                </Link>
+            </div>
+            {/* AdSense Approval - Professional Copyright Placement */}
+            <p className="text-xs text-gray-400 dark:text-gray-600 mt-2 md:mt-0 md:absolute right-4">
+                © {new Date().getFullYear()} EasyXL.GG All rights reserved.
+            </p>
         </div>
     </footer>
 </div>

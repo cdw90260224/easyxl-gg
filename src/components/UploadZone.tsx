@@ -4,6 +4,7 @@ import * as XLSX from 'xlsx';
 import { toast } from 'sonner';
 import { parseExcelWorkbook, type ParsedSheet } from '../utils/excelParser';
 import { extractTextFromPDF } from '../utils/pdfParser';
+import { processAndCompressImage } from '../utils/imageHelper';
 
 interface UploadZoneProps {
     onSheetsLoaded: (sheets: ParsedSheet[]) => void;
@@ -34,18 +35,7 @@ export default function UploadZone({ onSheetsLoaded, onPDFLoaded, onImagesLoaded
         if (imageFiles.length > 0) {
             try {
                 toast.loading(`${imageFiles.length}장의 이미지를 분석하기 위해 준비 중...`);
-                const promises = imageFiles.map(file => {
-                    return new Promise<{base64: string, mimeType: string}>((resolve, reject) => {
-                        const reader = new FileReader();
-                        reader.onload = (e) => {
-                            const result = e.target?.result as string;
-                            const base64 = result.split(',')[1];
-                            resolve({ base64, mimeType: file.type || 'image/jpeg' });
-                        };
-                        reader.onerror = reject;
-                        reader.readAsDataURL(file);
-                    });
-                });
+                const promises = imageFiles.map(file => processAndCompressImage(file));
                 const imageDataArray = await Promise.all(promises);
                 toast.dismiss();
                 onImagesLoaded(imageDataArray);
