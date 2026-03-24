@@ -1,11 +1,9 @@
 import { Moon, Sun, Shield, ShieldAlert, FileSpreadsheet, Clock } from 'lucide-react';
 import { Link } from 'react-router-dom';
-import { useState } from 'react';
 import { supabase } from '../lib/supabase';
 import { toast } from 'sonner';
 
-export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivacyPolicy, user, onShowHistory }: any) {
-    const [isSyncing, setIsSyncing] = useState(false);
+export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivacyPolicy, user, onShowHistory, onSync, isSyncing }: any) {
     const isLoggedIn = !!user;
 
     const handleLogin = async () => {
@@ -14,6 +12,7 @@ export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivac
             provider: 'google',
             options: {
                 redirectTo: window.location.origin,
+                scopes: 'https://www.googleapis.com/auth/spreadsheets',
             }
         });
         if (error) toast.error(error.message);
@@ -25,13 +24,6 @@ export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivac
         toast.success("로그아웃 되었습니다.");
     };
 
-    const handleSync = () => {
-        setIsSyncing(true);
-        setTimeout(() => {
-            setIsSyncing(false);
-            toast.success('성공적으로 구글 시트에 반영되었습니다 (시뮬레이션)');
-        }, 2000);
-    };
 
     return (
         <header className="glass-morphism sticky top-0 z-50 transition-colors shadow-sm dark:shadow-none border-b border-gray-200 dark:border-gray-800">
@@ -87,7 +79,7 @@ export default function Header({ isDark, toggleDark, isPrivacyMode, onShowPrivac
                                 <span className="hidden md:inline">히스토리</span>
                             </button>
                             <button
-                                onClick={handleSync}
+                                onClick={onSync}
                                 disabled={isSyncing}
                                 className="text-sm font-bold px-4 py-2 bg-deepblue-600 text-white rounded-xl hover:bg-deepblue-700 disabled:opacity-50 transition-all shadow-md shadow-deepblue-500/20 flex items-center gap-2"
                             >

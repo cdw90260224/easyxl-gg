@@ -19,6 +19,7 @@ import {
 import { saveSheet, listSheets, getSheet, deleteSheet, type SheetRecord } from './services/sheetService';
 import { listAnalysisHistory, deleteAnalysisHistory, type AnalysisHistoryRecord } from './services/historyService';
 import { saveAnalysisResult } from './services/databaseService';
+import { exportToGoogleSheets } from './services/googleSheetsService';
 import SheetTabs from './components/SheetTabs';
 import { parseExcelWorkbook } from './utils/excelParser';
 import { processAndCompressImage } from './utils/imageHelper';
@@ -45,6 +46,7 @@ export default function App() {
     const [savedSheets, setSavedSheets] = useState<SheetRecord[]>([]);
     const [showSavedSheets, setShowSavedSheets] = useState(false);
     const [isSaving, setIsSaving] = useState(false);
+    const [isSyncing, setIsSyncing] = useState(false);
     const [activeTab, setActiveTab] = useState<'create' | 'edit'>('create');
     const [isGlobalDragging, setIsGlobalDragging] = useState(false);
     const [user, setUser] = useState<any>(null);
@@ -689,6 +691,50 @@ export default function App() {
         reader.readAsArrayBuffer(file);
     };
 
+    const handleGoogleSync = async () => {
+        if (!supabase) return toast.error('Supabase 설정이 필요합니다.');
+        if (!filteredData || filteredData.length === 0) return toast.warning('내보낼 데이터가 없습니다.');
+
+        // provider_token은 세션에서 직접 가져와야 합니다
+        const { data: sessionData } = await supabase.auth.getSession();
+        const providerToken = sessionData?.session?.provider_token;
+
+        if (!providerToken) {
+            toast.error('구글 시트 연동 권한이 없습니다. 로그아웃 후 다시 로그인해 주세요.');
+            return;
+        }
+
+        setIsSyncing(true);
+        const activeSheetName = sheets[activeSheetIndex]?.name || '내 시트';
+
+        // 데이터를 2D 배열로 변환 (헤더 행 + 데이터 행)
+        const headers = filteredData.length > 0
+            ? Object.keys(filteredData[0]).filter((k: string) => k !== '_id')
+            : [];
+        const rows = filteredData.map((row: any) => headers.map(h => row[h] ?? ''));
+        const exportData = [headers, ...rows];
+
+        try {
+            const result = await exportToGoogleSheets(providerToken, activeSheetName, exportData);
+            toast.success(
+                `✅ 구글 시트 내보내기 완료!`,
+                {
+                    description: `"${activeSheetName}" 시트가 생성되었습니다.`,
+                    action: {
+                        label: '시트 열기',
+                        onClick: () => window.open(result.spreadsheetUrl, '_blank'),
+                    },
+                    duration: 10000,
+                }
+            );
+        } catch (err: unknown) {
+            const msg = err instanceof Error ? err.message : '알 수 없는 오류';
+            toast.error(`구글 시트 내보내기 실패: ${msg}`);
+        } finally {
+            setIsSyncing(false);
+        }
+    };
+
     return (
         <div
             className="min-h-screen flex flex-col bg-slate-50 dark:bg-[#0f0f12] transition-colors duration-500 font-sans relative"
@@ -719,6 +765,8 @@ export default function App() {
                 onShowPrivacyPolicy={() => setIsPrivacyModalOpen(true)}
                 user={user}
                 onShowHistory={() => setShowHistory(true)}
+                onSync={handleGoogleSync}
+                isSyncing={isSyncing}
             />
 
             <Routes>
