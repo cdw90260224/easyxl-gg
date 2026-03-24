@@ -55,7 +55,7 @@ export default function About() {
 
                 {/* Hero */}
                 <header className="text-center space-y-4">
-                    <h1 className="text-4xl sm:text-5xl font-extrabold text-gray-900 dark:text-white tracking-tight leading-tight">
+                    <h1 className="text-3xl sm:text-4xl font-extrabold text-gray-900 dark:text-white tracking-tight leading-tight">
                         EasyXL: 데이터 분석의<br />
                         <span className="text-indigo-600 dark:text-indigo-400">새로운 패러다임을 열다</span>
                     </h1>
