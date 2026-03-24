@@ -956,89 +956,108 @@ export default function App() {
 
                         {/* 하단 여백용 */}
                         <div className="h-4"></div>
+                    </div>
+                )}
 
-                        {/* ── 저장된 시트 목록 ── */}
-                        {showSavedSheets && savedSheets.length > 0 && (
-                            <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in-95 duration-300">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
-                                        저장된 시트 ({savedSheets.length})
-                                    </h3>
-                                    <button onClick={() => setShowSavedSheets(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                                    </button>
-                                </div>
-                                <div className="space-y-2">
-                                    {savedSheets.map(sheet => (
-                                        <div key={sheet.id} className="flex items-center justify-between p-3 rounded-xl bg-gray-50 dark:bg-[#262626] hover:bg-gray-100 dark:hover:bg-[#333] transition-colors">
-                                            <button
-                                                onClick={() => handleLoadSheet(sheet.id)}
-                                                className="flex-1 text-left"
-                                            >
-                                                <span className="font-medium text-gray-900 dark:text-gray-100">{sheet.title}</span>
-                                                <span className="block text-xs text-gray-400 mt-0.5">
-                                                    {new Date(sheet.created_at).toLocaleString('ko-KR')}
-                                                </span>
-                                            </button>
-                                            <button
-                                                onClick={async () => {
-                                                    try {
-                                                        await deleteSheet(sheet.id);
-                                                        setSavedSheets(prev => prev.filter(s => s.id !== sheet.id));
-                                                        toast.success('시트가 삭제되었습니다.');
-                                                    } catch { toast.error('삭제 실패'); }
-                                                }}
-                                                className="ml-3 p-1.5 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-colors"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                                            </button>
+                {/* ── 분석 히스토리 목록 ── */}
+                {showHistory && (
+                    <div className="w-full max-w-6xl mx-auto bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-300 mb-10">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                                최근 분석 이력 {history.length > 0 && `(${history.length})`}
+                            </h3>
+                            <button onClick={() => setShowHistory(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            </button>
+                        </div>
+                        
+                        {history.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {history.map(item => (
+                                    <div 
+                                        key={item.id} 
+                                        className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#262626] border border-transparent hover:border-blue-500/50 transition-all cursor-pointer group" 
+                                        onClick={() => handleLoadHistoryItem(item)}
+                                    >
+                                        <div className="flex-1 overflow-hidden">
+                                            <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{item.file_name}</span>
+                                            <span className="text-xs text-gray-400">
+                                                {new Date(item.created_at).toLocaleString('ko-KR')} · {item.data.length}행
+                                            </span>
                                         </div>
-                                    ))}
-                                </div>
+                                        <button
+                                            onClick={async (e) => {
+                                                e.stopPropagation();
+                                                if (!confirm('이 이력을 삭제하시겠습니까?')) return;
+                                                try {
+                                                    await deleteAnalysisHistory(item.id);
+                                                    setHistory(prev => prev.filter(h => h.id !== item.id));
+                                                    toast.success('분석 이력이 삭제되었습니다.');
+                                                } catch { toast.error('삭제 실패'); }
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        ) : (
+                            <div className="text-center py-12 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800">
+                                <div className="text-gray-400 mb-2">분석 이력이 아직 없습니다.</div>
+                                <div className="text-xs text-gray-500">이미지를 업로드하거나 AI에게 질문해 보세요!</div>
                             </div>
                         )}
+                    </div>
+                )}
 
-                        {/* ── 분석 히스토리 목록 ── */}
-                        {showHistory && history.length > 0 && (
-                            <div className="bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-5 shadow-xl animate-in fade-in zoom-in-95 duration-300">
-                                <div className="flex items-center justify-between mb-4">
-                                    <h3 className="font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-blue-500"><path d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-                                        최근 분석 이력 ({history.length})
-                                    </h3>
-                                    <button onClick={() => setShowHistory(false)} className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
-                                    </button>
-                                </div>
-                                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                                    {history.map(item => (
-                                        <div key={item.id} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#262626] border border-transparent hover:border-blue-500/50 transition-all cursor-pointer group" onClick={() => handleLoadHistoryItem(item)}>
-                                            <div className="flex-1 overflow-hidden">
-                                                <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{item.file_name}</span>
-                                                <span className="text-xs text-gray-400">
-                                                    {new Date(item.created_at).toLocaleString('ko-KR')} · {item.data.length}행
-                                                </span>
-                                            </div>
-                                            <button
-                                                onClick={async (e) => {
-                                                    e.stopPropagation();
-                                                    if (!confirm('이 이력을 삭제하시겠습니까?')) return;
-                                                    try {
-                                                        await deleteAnalysisHistory(item.id);
-                                                        setHistory(prev => prev.filter(h => h.id !== item.id));
-                                                        toast.success('분석 이력이 삭제되었습니다.');
-                                                    } catch { toast.error('삭제 실패'); }
-                                                }}
-                                                className="opacity-0 group-hover:opacity-100 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
-                                            >
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
+                {/* ── 저장된 시트 목록 ── */}
+                {showSavedSheets && (
+                    <div className="w-full max-w-6xl mx-auto bg-white dark:bg-[#1a1a1a] border border-gray-200 dark:border-gray-800 rounded-2xl p-6 shadow-xl animate-in fade-in zoom-in-95 duration-300 mb-10">
+                        <div className="flex items-center justify-between mb-6">
+                            <h3 className="text-lg font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" className="text-purple-500"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" /></svg>
+                                저장된 시트 {savedSheets.length > 0 && `(${savedSheets.length})`}
+                            </h3>
+                            <button onClick={() => setShowSavedSheets(false)} className="p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-full transition-colors text-gray-500">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" /></svg>
+                            </button>
+                        </div>
+                        {savedSheets.length > 0 ? (
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {savedSheets.map(sheet => (
+                                    <div key={sheet.id} className="flex items-center justify-between p-4 rounded-xl bg-gray-50 dark:bg-[#262626] border border-transparent hover:border-purple-500/50 transition-all group">
+                                        <button
+                                            onClick={() => handleLoadSheet(sheet.id)}
+                                            className="flex-1 text-left"
+                                        >
+                                            <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{sheet.title}</span>
+                                            <span className="block text-xs text-gray-400 mt-1">
+                                                {new Date(sheet.created_at).toLocaleString('ko-KR')}
+                                            </span>
+                                        </button>
+                                        <button
+                                            onClick={async () => {
+                                                if (!confirm('시트를 삭제하시겠습니까?')) return;
+                                                try {
+                                                    await deleteSheet(sheet.id);
+                                                    setSavedSheets(prev => prev.filter(s => s.id !== sheet.id));
+                                                    toast.success('시트가 삭제되었습니다.');
+                                                } catch { toast.error('삭제 실패'); }
+                                            }}
+                                            className="opacity-0 group-hover:opacity-100 ml-3 p-2 text-red-400 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-lg transition-all"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                                        </button>
+                                    </div>
+                                ))}
                             </div>
-                        ) }
+                        ) : (
+                            <div className="text-center py-12 bg-gray-50/50 dark:bg-gray-900/30 rounded-2xl border border-dashed border-gray-200 dark:border-gray-800 text-gray-400">
+                                저장된 시트가 아직 없습니다.
+                            </div>
+                        )}
                     </div>
                 )}
             </main>
