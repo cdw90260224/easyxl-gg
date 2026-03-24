@@ -119,8 +119,8 @@ export default function Guide() {
                     <h2 className="text-2xl font-bold text-gray-900 dark:text-white mb-6">4. 솔루션 표준 이용 프로세스</h2>
                     <div className="space-y-4">
                         {[
-                            { icon: Upload, step: 'STEP 1', title: '데이터 소스 업로드', desc: '[파일 업로드] 섹션에서 분석할 이미지(JPG, PNG) 또는 엑셀(XLSX, CSV) 파일을 로드합니다.' },
-                            { icon: MessageSquareText, step: 'STEP 2', title: 'AI 컨설팅 및 질의', desc: '상단 AI 입력창에 필요한 분석 요청을 자연어로 입력합니다. (예: "항목별 비중 계산", "특정 날짜 구간 필터링")' },
+                            { icon: MessageSquareText, step: 'STEP 1', title: 'AI 컨설팅 및 질의', desc: '상단 AI 입력창에 필요한 분석 요청을 자연어로 입력합니다. (예: "항목별 비중 계산", "특정 날짜 구간 필터링")' },
+                            { icon: Upload, step: 'STEP 2', title: '데이터 소스 업로드', desc: '[파일 업로드] 섹션에서 분석할 이미지(JPG, PNG) 또는 엑셀(XLSX, CSV) 파일을 로드합니다.' },
                             { icon: MousePointerClick, step: 'STEP 3', title: '데이터 검토 및 인터랙티브 편집', desc: '분석된 결과값을 InteractiveGrid에서 최종 검토하고, 필요에 따라 개별 셀의 데이터를 즉시 수정합니다.' },
                             { icon: Download, step: 'STEP 4', title: '데이터 익스포트 및 공유', desc: '가공된 고품질 데이터를 표준 엑셀 포맷으로 내보내거나, 암호화된 링크를 생성해 관계자에게 즉시 공유할 수 있습니다.' },
                         ].map((step, i) => (
