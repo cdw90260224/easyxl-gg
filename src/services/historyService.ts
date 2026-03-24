@@ -4,7 +4,7 @@ export interface AnalysisHistoryRecord {
     id: string;
     user_id: string;
     file_name: string;
-    data: any[];
+    analysis_data: any[];
     created_at: string;
 }
 
@@ -29,7 +29,7 @@ export const saveAnalysisHistory = async (
         .insert({
             user_id: userId,
             file_name: fileName,
-            data: data
+            analysis_data: data
         })
         .select()
         .single();

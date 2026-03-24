@@ -582,7 +582,7 @@ export default function App() {
     };
 
     const handleLoadHistoryItem = (item: AnalysisHistoryRecord) => {
-        const dataWithIds = item.data.map((row: any, idx: number) => ({
+        const dataWithIds = item.analysis_data.map((row: any, idx: number) => ({
             ...row,
             _id: row._id || `his_${idx}_${Date.now()}`
         }));
@@ -980,7 +980,7 @@ export default function App() {
                                                 <div className="flex-1 overflow-hidden">
                                                     <span className="font-bold text-gray-900 dark:text-gray-100 block truncate">{item.file_name}</span>
                                                     <span className="text-xs text-gray-400">
-                                                        {new Date(item.created_at).toLocaleString('ko-KR')} · {item.data.length}행
+                                                        {new Date(item.created_at).toLocaleString('ko-KR')} · {item.analysis_data.length}행
                                                     </span>
                                                 </div>
                                                 <button
