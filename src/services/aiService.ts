@@ -61,6 +61,7 @@ export interface AIAnalysisResult {
     filterOperator?: 'equals' | 'contains' | 'greater' | 'less';
     generatedData?: any[];
     updates?: Array<{ row: number; columnName?: string; col?: number; value: any }>;
+    textReplace?: { from: string; to: string }; // 클라이언트측 전체 탐색 치환용
     unit?: string;
     calculatedValue?: number | string;
     chartConfig?: ChartConfig;
@@ -188,6 +189,7 @@ export const processNaturalLanguageQuery = async (
   "filterOperator": "equals" | "contains" | "greater" | "less",
   "generatedData": [{"열이름": "값", "열이름2": "값2"}],
   "updates": [{"row": "배열 인덱스(0부터 시작하는 숫자)", "columnName": "수정할 열 이름", "value": "값"}],
+  "textReplace": {"from": "원래 텍스트", "to": "새 텍스트"},
   "unit": "단위",
   "calculatedValue": 숫자,
   "chartConfig": {"chartType": "bar|pie|line|area", "xAxis": "X축 열이름", "yAxis": "Y축 열이름", "title": "차트 제목"},
@@ -206,7 +208,10 @@ export const processNaturalLanguageQuery = async (
 - 행 필터링 요청 → intent: "filtering"
 - 데이터 정렬 요청 → intent: "sort"
 - 사칙연산 등 수치 계산 요청 → intent: "calculation"
-- 기존 데이터 영역 내 특정 셀 값 내용만 단순히 변경/수정하는 지시 (예: "첫번째 이유를 OO으로 바꿔줘") → intent: "update"
+- 특정 텍스트 치환 요청 (예: "10월 대만여행을 9월로 바꿰줘", "OO을 XX로 변경") → intent: "update" + textReplace 사용
+  - **가장 중요**: textReplace를 쓸 때는 updates 배열은 비워두세요. 클라이언트가 전체 데이터를 직접 스캔하여 수정합니다.
+  - from에는 바꿔야 할 정확한 원본 단어/문장을, to에는 바꿔줘야 할 새 단어/문장을 넣으세요.
+- 특정 행의 셌밀한 수정 (좌표 인식 가능할 때) → intent: "update" + updates 배열 사용
   - \`columnName\`에는 현재 표의 열 이름 중 정확히 일치하는 문자열을 넣고, \`row\`에는 대상 행의 0부터 시작하는 인덱스(0=첫행, 1=두번째 행...) 숫자를 넣으세요.
 - 엑셀 제어와 무관한 일반적인 질문이나 대화 (예: 인사, 최저임금 등 상식 질문) → intent: "chat"
   - 친절한 텍스트 답변은 오직 \`explanation\`에만 작성하세요. 

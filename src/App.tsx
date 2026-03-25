@@ -382,37 +382,62 @@ export default function App() {
                 } else {
                     toast.error('지정된 시트를 찾을 수 없습니다.');
                 }
-            } else if (result.intent === 'update' && result.updates) {
-                const newData = data.map((row: any, ri: number) => {
-                    const rowUpdates = result.updates!.filter(u => u.row === ri);
-                    if (rowUpdates.length === 0) return row;
-
-                    const updated = { ...row };
-                    rowUpdates.forEach((upd: { col?: number; columnName?: string; value: any }) => {
-                        const colName = upd.columnName || (upd.col !== undefined ? columns[upd.col] : undefined);
-                        if (colName && columns.includes(colName)) {
-                            updated[colName] = upd.value;
-                        }
+            } else if (result.intent === 'update') {
+                // ── textReplace: 전체 데이터를 스캔하여 텍스트 치환 ──
+                if (result.textReplace) {
+                    const { from, to } = result.textReplace;
+                    const changedCells = new Set<string>();
+                    const headers = columns;
+                    const newData = data.map((row: any, ri: number) => {
+                        const updated = { ...row };
+                        headers.forEach((col: string, ci: number) => {
+                            const cellVal = String(updated[col] ?? '');
+                            if (cellVal.includes(from)) {
+                                updated[col] = cellVal.replaceAll(from, to);
+                                changedCells.add(`${ri}-${ci}`);
+                            }
+                        });
+                        return updated;
                     });
-                    return updated;
-                });
-                setData(newData); setFilteredData(newData);
-                setSheets(prev => {
-                    const arr = [...prev];
-                    arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: newData };
-                    pushHistory({ data: newData, filteredData: newData, sheets: arr, activeSheetIndex, analysis: result, chartConfig: null });
-                    return arr;
-                });
-
-                // 바꿄 셀 하이라이트 (1.5초 후 해제)
-                const changed = new Set<string>();
-                result.updates!.forEach(u => { if (u.col !== undefined) changed.add(`${u.row}-${u.col}`); else { const ci = Object.keys(newData[0] || {}).filter(k => k !== '_id').indexOf(u.columnName || ''); if (ci >= 0) changed.add(`${u.row}-${ci}`); } });
-                setHighlightedCells(changed);
-                setTimeout(() => setHighlightedCells(new Set()), 1800);
-
-                // 수정 내용을 포함한 쳤스트 메시지
-                toast.success(`✨ ${result.explanation || '선택 영역이 성공적으로 업데이트되었습니다.'}`);
-                setAnalysis(result);
+                    setData(newData); setFilteredData(newData);
+                    setSheets(prev => {
+                        const arr = [...prev];
+                        arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: newData };
+                        pushHistory({ data: newData, filteredData: newData, sheets: arr, activeSheetIndex, analysis: result, chartConfig: null });
+                        return arr;
+                    });
+                    setHighlightedCells(changedCells);
+                    setTimeout(() => setHighlightedCells(new Set()), 1800);
+                    toast.success(`✨ ${result.explanation || `"${from}"을(를) "${to}"으로 변경했습니다. (${changedCells.size}개 셀)`}`);
+                    setAnalysis(result);
+                } else if (result.updates) {
+                    // ── updates[]: 좌표 기반 수정 (기존 로직) ──
+                    const newData = data.map((row: any, ri: number) => {
+                        const rowUpdates = result.updates!.filter(u => u.row === ri);
+                        if (rowUpdates.length === 0) return row;
+                        const updated = { ...row };
+                        rowUpdates.forEach((upd: { col?: number; columnName?: string; value: any }) => {
+                            const colName = upd.columnName || (upd.col !== undefined ? columns[upd.col] : undefined);
+                            if (colName && columns.includes(colName)) {
+                                updated[colName] = upd.value;
+                            }
+                        });
+                        return updated;
+                    });
+                    setData(newData); setFilteredData(newData);
+                    setSheets(prev => {
+                        const arr = [...prev];
+                        arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: newData };
+                        pushHistory({ data: newData, filteredData: newData, sheets: arr, activeSheetIndex, analysis: result, chartConfig: null });
+                        return arr;
+                    });
+                    const changed = new Set<string>();
+                    result.updates!.forEach(u => { if (u.col !== undefined) changed.add(`${u.row}-${u.col}`); else { const ci = Object.keys(newData[0] || {}).filter(k => k !== '_id').indexOf(u.columnName || ''); if (ci >= 0) changed.add(`${u.row}-${ci}`); } });
+                    setHighlightedCells(changed);
+                    setTimeout(() => setHighlightedCells(new Set()), 1800);
+                    toast.success(`✨ ${result.explanation || '선택 영역이 성공적으로 업데이트되었습니다.'}`);
+                    setAnalysis(result);
+                }
             } else if (result.intent === 'filtering') {
                 const { filterColumn, filterValue, filterOperator } = result;
                 let filtered = data;
