@@ -62,6 +62,61 @@ export const exportToGoogleSheets = async (
         throw new Error(err.error?.message || '스프레드시트에 데이터를 쓰는 데 실패했습니다.');
     }
 
+    // 3. 서식(테두리, 헤더 배경 및 굵은 글씨) 적용
+    const sheetId = sheetData.sheets?.[0]?.properties?.sheetId || 0;
+    const numRows = data.length;
+    const numCols = data.length > 0 ? data[0].length : 0;
+
+    if (numRows > 0 && numCols > 0) {
+        const borderStyle = { style: 'SOLID', width: 1, color: { red: 0, green: 0, blue: 0, alpha: 1 } };
+        await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${spreadsheetId}:batchUpdate`, {
+            method: 'POST',
+            headers: {
+                'Authorization': `Bearer ${providerToken}`,
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                requests: [
+                    {
+                        updateBorders: {
+                            range: {
+                                sheetId: sheetId,
+                                startRowIndex: 0,
+                                endRowIndex: numRows,
+                                startColumnIndex: 0,
+                                endColumnIndex: numCols,
+                            },
+                            top: borderStyle,
+                            bottom: borderStyle,
+                            left: borderStyle,
+                            right: borderStyle,
+                            innerHorizontal: borderStyle,
+                            innerVertical: borderStyle,
+                        }
+                    },
+                    {
+                        repeatCell: {
+                            range: {
+                                sheetId: sheetId,
+                                startRowIndex: 0,
+                                endRowIndex: 1,
+                                startColumnIndex: 0,
+                                endColumnIndex: numCols,
+                            },
+                            cell: {
+                                userEnteredFormat: {
+                                    backgroundColor: { red: 0.9, green: 0.9, blue: 0.9, alpha: 1 },
+                                    textFormat: { bold: true }
+                                }
+                            },
+                            fields: 'userEnteredFormat(backgroundColor,textFormat)'
+                        }
+                    }
+                ]
+            })
+        });
+    }
+
     return {
         spreadsheetId,
         spreadsheetUrl,
