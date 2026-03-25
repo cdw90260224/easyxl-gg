@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Sparkles, TrendingUp, Filter, Edit3, SortDesc, AlertCircle, ChevronDown, ChevronUp } from 'lucide-react';
+import { Sparkles, TrendingUp, Filter, Edit3, SortDesc, AlertCircle, ChevronDown, ChevronUp, MessageSquare } from 'lucide-react';
 
 const intentIcon: Record<string, any> = {
     calculation: TrendingUp,
@@ -8,6 +8,7 @@ const intentIcon: Record<string, any> = {
     generation: Sparkles,
     join: Sparkles,
     sort: SortDesc,
+    chat: MessageSquare,
     error: AlertCircle
 };
 
@@ -18,6 +19,7 @@ const intentLabel: Record<string, string> = {
     generation: '데이터 생성 완료',
     join: '데이터 병합(Join) 완료',
     sort: '데이터 정렬 완료',
+    chat: 'AI 답변',
     error: '분석 오류',
 };
 
@@ -28,6 +30,7 @@ const intentColor: Record<string, string> = {
     generation: 'from-[#1e1b4b] to-[#312e81]',
     join: 'from-[#4c1d95] to-[#5b21b6]',
     sort: 'from-[#334155] to-[#475569]',
+    chat: 'from-[#0ea5e9] to-[#0284c7]',
     error: 'from-[#991b1b] to-[#b91c1c]',
 };
 

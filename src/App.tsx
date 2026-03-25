@@ -370,6 +370,8 @@ export default function App() {
             } else if (result.intent === 'calculation') {
                 toast.success('✨ 분석이 완료되었습니다.');
                 setAnalysis(result);
+            } else if (result.intent === 'chat') {
+                toast.success('💬 AI가 답변을 작성했습니다.');
             }
         } catch (err: any) {
             console.error('[AI Error]', err);

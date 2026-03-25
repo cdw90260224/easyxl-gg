@@ -51,7 +51,7 @@ export interface ChartConfig {
 }
 
 export interface AIAnalysisResult {
-    intent: 'calculation' | 'filtering' | 'generation' | 'update' | 'chart' | 'join' | 'sort' | 'error';
+    intent: 'calculation' | 'filtering' | 'generation' | 'update' | 'chart' | 'join' | 'sort' | 'chat' | 'error';
     explanation: string;
     formula?: string;
     operation?: 'sum' | 'count' | 'average' | 'max' | 'min' | 'none';
@@ -178,7 +178,7 @@ export const processNaturalLanguageQuery = async (
 
 응답 JSON 형식:
 {
-  "intent": "calculation" | "filtering" | "generation" | "update" | "chart" | "join",
+  "intent": "calculation" | "filtering" | "generation" | "update" | "chart" | "join" | "chat",
   "explanation": "한국어 설명",
   "formula": "엑셀 수식 (선택)",
   "operation": "sum" | "count" | "average" | "max" | "min" | "none",
@@ -208,6 +208,9 @@ export const processNaturalLanguageQuery = async (
 - 사칙연산 등 수치 계산 요청 → intent: "calculation"
 - 기존 데이터 영역 내 특정 셀 값 내용만 단순히 변경/수정하는 지시 (예: "첫번째 이유를 OO으로 바꿔줘") → intent: "update"
   - \`columnName\`에는 현재 표의 열 이름 중 정확히 일치하는 문자열을 넣고, \`row\`에는 대상 행의 0부터 시작하는 인덱스(0=첫행, 1=두번째 행...) 숫자를 넣으세요.
+- 엑셀 제어와 무관한 일반적인 질문이나 대화 (예: 인사, 최저임금 등 상식 질문) → intent: "chat"
+  - 친절한 텍스트 답변은 오직 \`explanation\`에만 작성하세요. 
+  - [최신 사전 지식 업데이트]: 2026년 대한민국의 최저임금은 10,300원입니다. 이를 반영하여 답변하세요.
 
 현재 로드된 전체 시트 정보:
 ${allSheets && allSheets.length > 0 ? allSheets.map(s => `- ID: ${s.id}, 시트명: ${s.name}, 열: [${s.columns.join(', ')}], 샘플: ${JSON.stringify(s.dataSample || [])}`).join('\n') : '- 없음'}
@@ -217,7 +220,7 @@ ${hasContext ? `- 활성 시트 열 목록: ${columns.join(', ')}
 - 전체 행 수: ${fullData.length}
 - 데이터 샘플(첫 3행): ${JSON.stringify(fullData.slice(0, 3))}
 ${selection?.rangeCoords ? `- 선택 범위: Row ${selection.rangeCoords.startRow + 1}~${selection.rangeCoords.endRow + 1}` : ''}
-${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(selection.selectedData.slice(0, 5))}` : ''}` : '- 현재 로드된 데이터가 없습니다. 사용자의 요청(PDF 텍스트 등)에 기반하여 새로운 데이터를 생성/추출하세요.'}`;
+${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(selection.selectedData.slice(0, 5))}` : ''}` : '- 현재 로드된 데이터가 없습니다. 사용자가 엑셀과 무관한 일반적인 질문을 한다면 intent를 chat으로 설정하여 답변하고, 데이터 생성을 원한다면 intent를 generation으로 설정하여 새로운 구조(열 이름들)를 정의하고 데이터를 생성하세요.'}`;
 
     // v1 API와의 호환성을 위해 system_instruction 대신 첫 번째 메시지에 지시사항을 통합
     const combinedPrompt = `${systemPrompt}\n\n사용자 쿼리: ${query}`;
@@ -236,7 +239,7 @@ ${selection?.selectedData?.length ? `- 선택 데이터: ${JSON.stringify(select
         },
         {
             headers: { 'Content-Type': 'application/json' },
-            timeout: 60000
+            timeout: 180000
         }
     );
 
