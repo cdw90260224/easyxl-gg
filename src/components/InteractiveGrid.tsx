@@ -158,10 +158,7 @@ export default function InteractiveGrid({ data, onSelectionChange, onDataChange,
                                                         cellValue.includes('제안') || 
                                                         cellValue.includes('키워드');
 
-                                // Duplicate Detection
-                                const cellText = String(row[h] ?? '').trim();
-                                const prevCellText = ri > 0 ? String(data[ri - 1][h] ?? '').trim() : '';
-                                const isDuplicate = ri > 0 && cellText !== '' && cellText === prevCellText && !isSectionHeader;
+
 
                                 return (
                                     <td
@@ -193,8 +190,7 @@ export default function InteractiveGrid({ data, onSelectionChange, onDataChange,
                                                         ${expandedCells.has(`${ri}-${ci}`) ? '' : 'line-clamp-2'}
                                                         ${isPositive ? 'text-red-500 font-semibold' : ''}
                                                         ${isNegative ? 'text-blue-500 font-semibold' : ''}
-                                                        ${isDuplicate && !selected ? 'opacity-0' : 'opacity-100'}
-                                                        group-hover/cell:opacity-100
+                                                        opacity-100
                                                     `}
                                                     title={cellValue}
                                                 >
