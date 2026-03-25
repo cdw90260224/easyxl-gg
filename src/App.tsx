@@ -68,6 +68,7 @@ export default function App() {
     const [user, setUser] = useState<any>(null);
     const [history, setHistory] = useState<AnalysisHistoryRecord[]>([]);
     const [showHistory, setShowHistory] = useState(false);
+    const [highlightedCells, setHighlightedCells] = useState<Set<string>>(new Set());
 
     // ── Undo/Redo 이력 스택 ──
     interface Snapshot { data: any[]; filteredData: any[]; sheets: any[]; activeSheetIndex: number; analysis: AIAnalysisResult | null; chartConfig: ChartConfig | null; }
@@ -402,7 +403,15 @@ export default function App() {
                     pushHistory({ data: newData, filteredData: newData, sheets: arr, activeSheetIndex, analysis: result, chartConfig: null });
                     return arr;
                 });
-                toast.success('✨ 선택 영역이 성공적으로 업데이트되었습니다.');
+
+                // 바꿄 셀 하이라이트 (1.5초 후 해제)
+                const changed = new Set<string>();
+                result.updates!.forEach(u => { if (u.col !== undefined) changed.add(`${u.row}-${u.col}`); else { const ci = Object.keys(newData[0] || {}).filter(k => k !== '_id').indexOf(u.columnName || ''); if (ci >= 0) changed.add(`${u.row}-${ci}`); } });
+                setHighlightedCells(changed);
+                setTimeout(() => setHighlightedCells(new Set()), 1800);
+
+                // 수정 내용을 포함한 쳤스트 메시지
+                toast.success(`✨ ${result.explanation || '선택 영역이 성공적으로 업데이트되었습니다.'}`);
                 setAnalysis(result);
             } else if (result.intent === 'filtering') {
                 const { filterColumn, filterValue, filterOperator } = result;
@@ -1105,6 +1114,7 @@ export default function App() {
                                     <ErrorBoundary>
                                         <InteractiveGrid
                                             data={filteredData}
+                                            highlightedCells={highlightedCells}
                                             onSelectionChange={(r: number, c: number, r2: number, c2: number) => setSelectedRange({ startRow: r, startCol: c, endRow: r2, endCol: c2 })}
                                             onDataChange={(updatedFilteredData: any[]) => {
                                                 // 필터링된 데이터의 변경사항을 원본 데이터(data)에 병합

@@ -4,11 +4,12 @@ interface InteractiveGridProps {
     data: any[];
     onSelectionChange?: (startRow: number, startCol: number, endRow: number, endCol: number) => void;
     onDataChange?: (newData: any[]) => void;
+    highlightedCells?: Set<string>; // 'row-col' 형식
 }
 
 interface CellPos { row: number; col: number; }
 
-export default function InteractiveGrid({ data, onSelectionChange, onDataChange }: InteractiveGridProps) {
+export default function InteractiveGrid({ data, onSelectionChange, onDataChange, highlightedCells }: InteractiveGridProps) {
     const [editingCell, setEditingCell] = useState<CellPos | null>(null);
     const [editValue, setEditValue] = useState('');
     const [selStart, setSelStart] = useState<CellPos | null>(null);
@@ -141,6 +142,7 @@ export default function InteractiveGrid({ data, onSelectionChange, onDataChange 
                                 const editing = editingCell?.row === ri && editingCell?.col === ci;
                                 const val = row[h];
                                 const cellValue = String(val ?? '');
+                                const isHighlighted = highlightedCells?.has(`${ri}-${ci}`) ?? false;
                                 // Dynamic Analysis
                                 const isNumeric = /^-?\d+(\.\d+)?%?$/.test(cellValue.trim());
                                 const isPositive = cellValue.includes('+') || (isNumeric && parseFloat(cellValue) > 0 && cellValue.includes('%'));
@@ -167,6 +169,7 @@ export default function InteractiveGrid({ data, onSelectionChange, onDataChange 
                                         className={`border border-gray-100 dark:border-gray-800 relative cursor-cell transition-colors
                                             ${selected ? 'bg-deepblue-50 dark:bg-deepblue-500/10 ring-1 ring-inset ring-deepblue-500/30' : 'bg-white dark:bg-[#1a1a1a] hover:bg-gray-50/80 dark:hover:bg-gray-900/50'}
                                             ${isSectionHeader ? 'bg-slate-50 dark:bg-slate-900/40 font-bold border-t-2 border-t-slate-200 dark:border-t-slate-800' : ''}
+                                            ${isHighlighted ? '!bg-amber-100 dark:!bg-amber-900/30 ring-2 ring-inset ring-amber-400 dark:ring-amber-500 animate-pulse' : ''}
                                             text-left
                                         `}
                                         onMouseDown={() => handleMouseDown(ri, ci)}
