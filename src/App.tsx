@@ -32,6 +32,22 @@ import About from './pages/About';
 import Support from './pages/Support';
 import CookieBanner from './components/CookieBanner';
 
+// ── 탭별 독립 상태 타입 ──
+interface TabState {
+    sheets: { id: string; name: string; data: any[]; columns: string[] }[];
+    activeSheetIndex: number;
+    data: any[];
+    filteredData: any[];
+    analysis: AIAnalysisResult | null;
+    chartConfig: ChartConfig | null;
+    searchQuery: string;
+    selectedRange: SelectionContext['rangeCoords'];
+}
+const emptyTabState: TabState = {
+    sheets: [], activeSheetIndex: 0, data: [], filteredData: [],
+    analysis: null, chartConfig: null, searchQuery: '', selectedRange: null,
+};
+
 export default function App() {
     const [data, setData] = useState<any[]>([]);
     const [filteredData, setFilteredData] = useState<any[]>([]);
@@ -53,9 +69,35 @@ export default function App() {
     const [history, setHistory] = useState<AnalysisHistoryRecord[]>([]);
     const [showHistory, setShowHistory] = useState(false);
 
+    // ── 탭별 독립 상태 저장소 ──
+    const [createState, setCreateState] = useState<TabState>(emptyTabState);
+    const [editState, setEditState] = useState<TabState>(emptyTabState);
+
     // Multi-Sheet State
     const [sheets, setSheets] = useState<{ id: string; name: string; data: any[]; columns: string[] }[]>([]);
     const [activeSheetIndex, setActiveSheetIndex] = useState(0);
+
+    // ── 탭 전환: 현재 탭 상태 저장 후 반대 탭 상태 복원 ──
+    const handleTabChange = (newTab: 'create' | 'edit') => {
+        if (newTab === activeTab) return;
+        const currentState: TabState = {
+            sheets, activeSheetIndex, data, filteredData,
+            analysis, chartConfig, searchQuery, selectedRange,
+        };
+        if (activeTab === 'create') setCreateState(currentState);
+        else setEditState(currentState);
+
+        const nextState = newTab === 'create' ? createState : editState;
+        setSheets(nextState.sheets);
+        setActiveSheetIndex(nextState.activeSheetIndex);
+        setData(nextState.data);
+        setFilteredData(nextState.filteredData);
+        setAnalysis(nextState.analysis);
+        setChartConfig(nextState.chartConfig);
+        setSearchQuery(nextState.searchQuery);
+        setSelectedRange(nextState.selectedRange);
+        setActiveTab(newTab);
+    };
 
     const handleDeleteSheet = (index: number) => {
         setSheets(prev => {
@@ -780,7 +822,7 @@ export default function App() {
                             <div className="flex justify-center animate-in fade-in slide-in-from-top-2 duration-500">
                                 <div className="flex p-1 bg-gray-100 dark:bg-gray-900 rounded-2xl border border-gray-200 dark:border-gray-800 shadow-inner">
                                     <button
-                                        onClick={() => setActiveTab('create')}
+                                        onClick={() => handleTabChange('create')}
                                         className={`px-8 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'create'
                                             ? 'bg-white dark:bg-[#1a1a1a] text-deepblue-600 shadow-md transform scale-[1.02]'
                                             : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
@@ -790,7 +832,7 @@ export default function App() {
                                         엑셀 생성
                                     </button>
                                     <button
-                                        onClick={() => setActiveTab('edit')}
+                                        onClick={() => handleTabChange('edit')}
                                         className={`px-8 py-2.5 rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 ${activeTab === 'edit'
                                             ? 'bg-white dark:bg-[#1a1a1a] text-deepblue-600 shadow-md transform scale-[1.02]'
                                             : 'text-gray-500 hover:text-gray-700 dark:hover:text-gray-300'
