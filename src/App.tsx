@@ -69,6 +69,11 @@ export default function App() {
     const [history, setHistory] = useState<AnalysisHistoryRecord[]>([]);
     const [showHistory, setShowHistory] = useState(false);
 
+    // ── Undo/Redo 이력 스택 ──
+    interface Snapshot { data: any[]; filteredData: any[]; sheets: any[]; activeSheetIndex: number; analysis: AIAnalysisResult | null; chartConfig: ChartConfig | null; }
+    const [historyStack, setHistoryStack] = useState<Snapshot[]>([]);
+    const [historyIndex, setHistoryIndex] = useState(-1);
+
     // ── 탭별 독립 상태 저장소 ──
     const [createState, setCreateState] = useState<TabState>(emptyTabState);
     const [editState, setEditState] = useState<TabState>(emptyTabState);
@@ -99,6 +104,36 @@ export default function App() {
         setActiveTab(newTab);
     };
 
+    // ── 이력 스냅샷 저장 (데이터 변경 시 호출) ──
+    const pushHistory = (snap: Snapshot) => {
+        setHistoryStack(prev => {
+            const base = prev.slice(0, historyIndex + 1);
+            const next = [...base, snap].slice(-10); // 최대 10개
+            setHistoryIndex(next.length - 1);
+            return next;
+        });
+    };
+
+    const handleUndo = () => {
+        if (historyIndex <= 0) { toast.info('더 이상 되돌릴 수 없습니다.'); return; }
+        const snap = historyStack[historyIndex - 1];
+        setData(snap.data); setFilteredData(snap.filteredData);
+        setSheets(snap.sheets); setActiveSheetIndex(snap.activeSheetIndex);
+        setAnalysis(snap.analysis); setChartConfig(snap.chartConfig);
+        setHistoryIndex(prev => prev - 1);
+        toast.info('↩ 되돌렸습니다.');
+    };
+
+    const handleRedo = () => {
+        if (historyIndex >= historyStack.length - 1) { toast.info('더 이상 앞으로 갈 수 없습니다.'); return; }
+        const snap = historyStack[historyIndex + 1];
+        setData(snap.data); setFilteredData(snap.filteredData);
+        setSheets(snap.sheets); setActiveSheetIndex(snap.activeSheetIndex);
+        setAnalysis(snap.analysis); setChartConfig(snap.chartConfig);
+        setHistoryIndex(prev => prev + 1);
+        toast.info('↪ 다시 실행했습니다.');
+    };
+
     const handleDeleteSheet = (index: number) => {
         setSheets(prev => {
             const newSheets = prev.filter((_, i) => i !== index);
@@ -124,6 +159,16 @@ export default function App() {
         if (isDark) document.documentElement.classList.add('dark');
         else document.documentElement.classList.remove('dark');
     }, [isDark]);
+
+    // ── Ctrl+Z / Ctrl+Y 단축키 ──
+    useEffect(() => {
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.ctrlKey && e.key === 'z') { e.preventDefault(); handleUndo(); }
+            if (e.ctrlKey && e.key === 'y') { e.preventDefault(); handleRedo(); }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [historyIndex, historyStack]);
 
     useEffect(() => {
         if (!supabase) return;
@@ -223,6 +268,8 @@ export default function App() {
         setFilteredData(newSheets[0].data);
         setAnalysis(null);
         setSelectedRange(null);
+        // 스냅샷 저장
+        pushHistory({ data: newSheets[0].data, filteredData: newSheets[0].data, sheets: [...sheets, ...newSheets], activeSheetIndex: newIndex, analysis: null, chartConfig: null });
         toast.success(`✅ ${newSheets.length}개의 시트 로드 완료!`);
     };
 
@@ -282,6 +329,7 @@ export default function App() {
                     const arr = [...prev];
                     const cols = Object.keys(dataWithIds[0] || {}).filter(k => k !== '_id');
                     arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: dataWithIds, columns: cols };
+                    pushHistory({ data: dataWithIds, filteredData: dataWithIds, sheets: arr, activeSheetIndex, analysis: result, chartConfig: null });
                     return arr;
                 });
 
@@ -325,6 +373,7 @@ export default function App() {
                     setSheets(prev => {
                         const arr = [...prev];
                         arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: newData };
+                        pushHistory({ data: newData, filteredData: newData, sheets: arr, activeSheetIndex, analysis: result, chartConfig: null });
                         return arr;
                     });
 
@@ -350,6 +399,7 @@ export default function App() {
                 setSheets(prev => {
                     const arr = [...prev];
                     arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: newData };
+                    pushHistory({ data: newData, filteredData: newData, sheets: arr, activeSheetIndex, analysis: result, chartConfig: null });
                     return arr;
                 });
                 toast.success('✨ 선택 영역이 성공적으로 업데이트되었습니다.');
@@ -402,6 +452,7 @@ export default function App() {
                     setSheets(prev => {
                         const arr = [...prev];
                         arr[activeSheetIndex] = { ...arr[activeSheetIndex], data: sorted };
+                        pushHistory({ data: sorted, filteredData: sorted, sheets: arr, activeSheetIndex, analysis: result, chartConfig: null });
                         return arr;
                     });
                     toast.success(`✨ ${column} 기준 ${direction === 'asc' ? '오름차순' : '내림차순'} 정렬 완료`);
@@ -938,6 +989,31 @@ export default function App() {
                                 <p className="text-gray-500 dark:text-gray-400 max-w-md">
                                     검색창에 만들고 싶은 데이터를 입력하거나,<br />아래의 추천 키워드를 클릭해보세요.
                                 </p>
+                            </div>
+                        )}
+
+                        {/* ── Undo / Redo \ubc84\ud2bc \u2500\u2500 */}
+                        {historyStack.length > 0 && (
+                            <div className="flex items-center gap-2 self-end animate-in fade-in duration-300">
+                                <button
+                                    onClick={handleUndo}
+                                    disabled={historyIndex <= 0}
+                                    title="되돌리기 (Ctrl+Z)"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-gray-600 dark:text-gray-300 hover:border-indigo-400 hover:text-indigo-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/></svg>
+                                    Undo
+                                </button>
+                                <button
+                                    onClick={handleRedo}
+                                    disabled={historyIndex >= historyStack.length - 1}
+                                    title="다시 실행 (Ctrl+Y)"
+                                    className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-semibold rounded-lg border border-gray-200 dark:border-gray-700 bg-white dark:bg-[#1a1a1a] text-gray-600 dark:text-gray-300 hover:border-indigo-400 hover:text-indigo-500 transition-all disabled:opacity-30 disabled:cursor-not-allowed shadow-sm"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/></svg>
+                                    Redo
+                                </button>
+                                <span className="text-[10px] text-gray-400 dark:text-gray-600">{historyIndex + 1} / {historyStack.length}</span>
                             </div>
                         )}
 
