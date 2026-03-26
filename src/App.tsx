@@ -39,6 +39,68 @@ export default function App() {
     const [activeTableIndex, setActiveTableIndex] = useState(0);
     const [originalFileBuffer, setOriginalFileBuffer] = useState<ArrayBuffer | null>(null);
 
+    // [New] Excel Theme Engine State
+    const [exportTheme, setExportTheme] = useState<'classic' | 'minimal' | 'data-focus'>('classic');
+    const [preserveOriginalStyle, setPreserveOriginalStyle] = useState(true);
+
+    const EXCEL_THEMES: Record<string, any> = {
+        classic: {
+            header: {
+                font: { bold: true, color: { rgb: "111827" }, size: 11 },
+                fill: { fgColor: { rgb: "F3F4F6" } },
+                border: {
+                    top: { style: 'thin', color: { rgb: "9CA3AF" } },
+                    bottom: { style: 'medium', color: { rgb: "374151" } },
+                    left: { style: 'thin', color: { rgb: "9CA3AF" } },
+                    right: { style: 'thin', color: { rgb: "9CA3AF" } }
+                }
+            },
+            body: {
+                font: { color: { rgb: "374151" }, size: 10 },
+                border: {
+                    top: { style: 'thin', color: { rgb: "E5E7EB" } },
+                    bottom: { style: 'thin', color: { rgb: "E5E7EB" } },
+                    left: { style: 'thin', color: { rgb: "E5E7EB" } },
+                    right: { style: 'thin', color: { rgb: "E5E7EB" } }
+                }
+            }
+        },
+        minimal: {
+            header: {
+                font: { bold: true, color: { rgb: "4F46E5" }, size: 10 },
+                fill: { fgColor: { rgb: "FFFFFF" } },
+                border: {
+                    bottom: { style: 'thin', color: { rgb: "4F46E5" } }
+                }
+            },
+            body: {
+                font: { color: { rgb: "6B7280" }, size: 9 },
+                border: {
+                    bottom: { style: 'hair', color: { rgb: "F3F4F6" } }
+                }
+            }
+        },
+        'data-focus': {
+            header: {
+                font: { bold: true, color: { rgb: "FFFFFF" }, size: 11 },
+                fill: { fgColor: { rgb: "1E1B4B" } },
+                border: {
+                    bottom: { style: 'thick', color: { rgb: "6366F1" } }
+                }
+            },
+            body: {
+                font: { color: { rgb: "000000" }, size: 10 },
+                border: {
+                    top: { style: 'thin', color: { rgb: "D1D5DB" } },
+                    bottom: { style: 'thin', color: { rgb: "D1D5DB" } },
+                    left: { style: 'thin', color: { rgb: "D1D5DB" } },
+                    right: { style: 'thin', color: { rgb: "D1D5DB" } }
+                },
+                zebra: { fgColor: { rgb: "F8FAFC" } }
+            }
+        }
+    };
+
 
     const handleDeleteSheet = (index: number) => {
         setSheets(prev => {
@@ -240,7 +302,7 @@ export default function App() {
             } else if (result.intent === 'update' && result.updates) {
                 const newData = data.map((row, ri) => {
                     const upd = result.updates!.find(u => u.row === ri);
-                    if (!upd) return row;
+                    if (!upd || upd.col === undefined || !columns[upd.col]) return row;
                     const updated = { ...row };
                     updated[columns[upd.col]] = upd.value;
                     return updated;
@@ -383,11 +445,11 @@ export default function App() {
                     const url = window.URL.createObjectURL(blob);
                     const a = document.createElement('a');
                     a.href = url;
-                    a.download = `easyxl_preserved_${new Date().getTime()}.xlsx`;
+                    a.download = `easyxl_${preserveOriginalStyle ? 'preserved' : exportTheme}_${new Date().getTime()}.xlsx`;
                     a.click();
                     window.URL.revokeObjectURL(url);
 
-                    toast.success('✨ 원본 스타일과 수식을 유지하며 데이터를 업데이트했습니다!');
+                    toast.success(preserveOriginalStyle ? '✨ 원본 스타일과 수식을 유지하며 데이터를 업데이트했습니다!' : `✨ ${exportTheme.toUpperCase()} 테마가 적용되어 저장되었습니다!`);
                 } else {
                     toast.error('원본 시트를 찾을 수 없습니다.');
                 }
@@ -427,8 +489,10 @@ export default function App() {
 
                 const ws = XLSX.utils.aoa_to_sheet(aoa);
 
-                // Business Standard Styles (깔끔한 테두리)
+                // Theme Engine Application
+                const theme = EXCEL_THEMES[exportTheme];
                 const range = XLSX.utils.decode_range(ws['!ref']!);
+
                 for (let R = range.s.r; R <= range.e.r; ++R) {
                     const isHeader = headerRows.includes(R);
                     const isRowEmpty = aoa[R].every(v => String(v || '').trim() === '');
@@ -438,26 +502,17 @@ export default function App() {
                         const address = XLSX.utils.encode_cell({ r: R, c: C });
                         if (!ws[address]) ws[address] = { t: 's', v: '' };
 
+                        const baseStyle = isHeader ? theme.header : theme.body;
+                        const cellStyle = JSON.parse(JSON.stringify(baseStyle));
+
+                        if (!isHeader && theme.body.zebra && R % 2 === 1) {
+                            cellStyle.fill = theme.body.zebra;
+                        }
+
                         ws[address].s = {
                             alignment: { wrapText: true, vertical: 'center', horizontal: 'left' },
-                            border: {
-                                top: { style: 'thin', color: { rgb: "D1D5DB" } },
-                                bottom: { style: 'thin', color: { rgb: "D1D5DB" } },
-                                left: { style: 'thin', color: { rgb: "D1D5DB" } },
-                                right: { style: 'thin', color: { rgb: "D1D5DB" } }
-                            }
+                            ...cellStyle
                         };
-
-                        if (isHeader) {
-                            ws[address].s.font = { bold: true, color: { rgb: "1F2937" } };
-                            ws[address].s.fill = { fgColor: { rgb: "F9FAFB" } };
-                            ws[address].s.border = {
-                                top: { style: 'thin', color: { rgb: "9CA3AF" } },
-                                bottom: { style: 'medium', color: { rgb: "4B5563" } },
-                                left: { style: 'thin', color: { rgb: "9CA3AF" } },
-                                right: { style: 'thin', color: { rgb: "9CA3AF" } }
-                            };
-                        }
                     }
                 }
 
@@ -477,8 +532,8 @@ export default function App() {
 
                 const wb = XLSX.utils.book_new();
                 XLSX.utils.book_append_sheet(wb, ws, activeSheet?.name || 'Report');
-                XLSX.writeFile(wb, `easyxl_report_${new Date().getTime()}.xlsx`);
-                toast.success('✨ 가독성이 개선된 새 엑셀 보고서를 생성했습니다!');
+                XLSX.writeFile(wb, `easyxl_${exportTheme}_${new Date().getTime()}.xlsx`);
+                toast.success(`✨ ${exportTheme.toUpperCase()} 테마 보고서를 생성했습니다!`);
             }
             
         } catch (err) { 
@@ -832,7 +887,11 @@ export default function App() {
                 {/* ── 업로드존: '수정' 모드이면서 데이터가 없을 때만 표시 ── */}
                 {activeTab === 'edit' && !hasData && (
                     <div className="w-full max-w-3xl animate-in fade-in zoom-in-95 duration-500">
-                        <UploadZone onSheetsLoaded={handleMultiSheetsLoaded} />
+                        <UploadZone 
+                            onSheetsLoaded={handleMultiSheetsLoaded} 
+                            onPDFLoaded={(text) => toast.info(`PDF 텍스트 수신됨: ${text.slice(0, 50)}...`)}
+                            onImagesLoaded={(imgs) => toast.info(`${imgs.length}장의 이미지 수신됨`)}
+                        />
                     </div>
                 )}
 
@@ -909,9 +968,38 @@ export default function App() {
                                             필터 해제
                                         </button>
                                     )}
+                                    <div className="flex bg-gray-100 dark:bg-gray-800 p-1 rounded-xl border border-gray-200 dark:border-gray-700">
+                                        {(['classic', 'minimal', 'data-focus'] as const).map((t) => (
+                                            <button
+                                                key={t}
+                                                onClick={() => setExportTheme(t)}
+                                                className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${exportTheme === t 
+                                                    ? 'bg-white dark:bg-[#262626] text-indigo-600 shadow-sm' 
+                                                    : 'text-gray-400 hover:text-gray-600 dark:hover:text-gray-200'}`}
+                                            >
+                                                {t.toUpperCase()}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {activeTab === 'edit' && (
+                                        <div className="flex items-center gap-2 px-3 py-1.5 bg-gray-50 dark:bg-gray-800/50 border border-gray-200 dark:border-gray-700 rounded-xl">
+                                            <input 
+                                                type="checkbox" 
+                                                id="preserve-style"
+                                                checked={preserveOriginalStyle}
+                                                onChange={() => setPreserveOriginalStyle(!preserveOriginalStyle)}
+                                                className="w-3.5 h-3.5 rounded border-gray-300 text-indigo-600"
+                                            />
+                                            <label htmlFor="preserve-style" className="text-[10px] font-bold text-gray-500 dark:text-gray-400 cursor-pointer">
+                                                원본 스타일 유지
+                                            </label>
+                                        </div>
+                                    )}
+
                                     <button
                                         onClick={handleExport}
-                                        className="flex items-center gap-2 px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-semibold rounded-xl transition-all shadow-lg shadow-green-600/30 active:scale-95"
+                                        className="flex items-center gap-2 px-5 py-2.5 bg-green-600 hover:bg-green-700 text-white text-sm font-bold rounded-xl transition-all shadow-lg shadow-green-600/30 active:scale-95"
                                     >
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" x2="12" y1="15" y2="3" /></svg>
                                         Export Excel
