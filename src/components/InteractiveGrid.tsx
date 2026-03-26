@@ -127,11 +127,13 @@ export default function InteractiveGrid({ data, onSelectionChange, onDataChange,
                                 >
                                     <div className="flex items-center gap-2">
                                         <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono flex-shrink-0">
-                                            {colLetter}:
+                                            {colLetter}{showColName ? ':' : ''}
                                         </span>
-                                        <span className={`text-sm font-bold truncate block ${showColName ? 'text-gray-900 dark:text-gray-100' : 'text-gray-300 dark:text-gray-600 italic font-normal'}`}>
-                                            {showColName ? h : "Name"}
-                                        </span>
+                                        {showColName && (
+                                            <span className="text-sm font-bold truncate block text-gray-900 dark:text-gray-100">
+                                                {h}
+                                            </span>
+                                        )}
                                     </div>
                                     <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-indigo-500/0 group-hover/header:bg-indigo-500/30 cursor-col-resize transition-colors" />
                                 </th>

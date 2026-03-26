@@ -53,14 +53,34 @@ export function detectHeader(rawRows: any[][]): {
     const firstRow = rawRows[firstDataRowIndex];
     const secondRow = rawRows[firstDataRowIndex + 1];
 
+    // Comprehensive Header Keywords for Korean/English business docs
+    const headerKeywords = [
+        '주차', '이름', '성함', '날짜', '일자', '키워드', '제목', '내용', '유형', '비고', 
+        '수량', '금액', '가격', 'NO', 'ID', 'UUID', '순번', '번호', '담당자', '상태', 
+        '구분', '순위', '조회수', '클릭수', '데이터', '성과', '합계', '평균', '비율', '퍼센트',
+        'CATEGORY', 'DATE', 'TITLE', 'NAME', 'STATUS', 'TYPE', 'NOTE', 'COUNT', 'RANK'
+    ];
+
     // Basic heuristic: Is the first row all strings?
     const isFirstRowAllStrings = firstRow.every(cell => cell === "" || cell === null || typeof cell === 'string');
     
+    // Check if the first row contains any typical header keywords
+    const hasHeaderKeywords = firstRow.some(cell => {
+        if (!cell || typeof cell !== 'string') return false;
+        const s = cell.trim().toUpperCase();
+        return headerKeywords.some(kw => s.includes(kw));
+    });
+
     // Check if the first row contains only generic letters like "A", "B", "C" or "Column 1"
     const isGenericLetters = firstRow.every((cell, i) => {
         const s = String(cell || '').trim().toUpperCase();
         return s === "" || s === XLSX.utils.encode_col(i) || s === `COLUMN ${i + 1}`;
     });
+
+    // If it has header keywords, it's definitely a header
+    if (hasHeaderKeywords && !isGenericLetters) {
+        return { headerIndex: firstDataRowIndex, isHeader: true, isAmbiguous: false };
+    }
 
     // Heuristic 2: Compare with second row
     if (secondRow) {
