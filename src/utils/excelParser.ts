@@ -54,21 +54,27 @@ export function detectHeader(rawRows: any[][]): {
     const secondRow = rawRows[firstDataRowIndex + 1];
 
     // Basic heuristic: Is the first row all strings?
-    const firstRowTypes: string[] = firstRow.map(cell => typeof cell);
-    const isFirstRowAllStrings = firstRow.every(cell => cell === "" || typeof cell === 'string');
+    const isFirstRowAllStrings = firstRow.every(cell => cell === "" || cell === null || typeof cell === 'string');
+    
+    // Check if the first row contains only generic letters like "A", "B", "C" or "Column 1"
+    const isGenericLetters = firstRow.every((cell, i) => {
+        const s = String(cell || '').trim().toUpperCase();
+        return s === "" || s === XLSX.utils.encode_col(i) || s === `COLUMN ${i + 1}`;
+    });
 
     // Heuristic 2: Compare with second row
     if (secondRow) {
+        const firstRowTypes: string[] = firstRow.map(cell => typeof cell);
         const hasTypeDiff = firstRowTypes.some((firstType: string, idx: number) => {
             const val1 = firstRow[idx];
             const val2 = secondRow[idx];
-            if (val1 === "" || val2 === "") return false;
-            // If first is string and second is number or date-like string
-            if (firstType === 'string' && (typeof val2 === 'number' || val2 instanceof Date)) return true;
+            if (val1 === "" || val2 === "" || val1 === null || val2 === null) return false;
+            // If first is string and second is number or date-like string or boolean
+            if (firstType === 'string' && (typeof val2 === 'number' || val2 instanceof Date || typeof val2 === 'boolean')) return true;
             return false;
         });
 
-        if (hasTypeDiff) return { headerIndex: firstDataRowIndex, isHeader: true, isAmbiguous: false };
+        if (hasTypeDiff && !isGenericLetters) return { headerIndex: firstDataRowIndex, isHeader: true, isAmbiguous: false };
     }
 
     // Heuristic 3: If many rows share the same type (e.g. all numbers), then first row is likely data
@@ -78,11 +84,12 @@ export function detectHeader(rawRows: any[][]): {
         return { headerIndex: firstDataRowIndex, isHeader: false, isAmbiguous: false };
     }
 
-    // Default to ambiguous if it's all strings but no clear type shift
-    if (isFirstRowAllStrings) {
-        return { headerIndex: firstDataRowIndex, isHeader: true, isAmbiguous: true };
+    // If it's all strings and NOT generic letters, it's a header
+    if (isFirstRowAllStrings && !isGenericLetters) {
+        return { headerIndex: firstDataRowIndex, isHeader: true, isAmbiguous: false };
     }
 
+    // Default to false if it looks like generic letters or mixed data
     return { headerIndex: firstDataRowIndex, isHeader: false, isAmbiguous: false };
 }
 
@@ -121,7 +128,10 @@ export function parseExcelData(
 
     if (isHeader && headerRowIdx !== -1) {
         const headerRow = rawRows[headerRowIdx];
-        finalHeaders = headerRow.map((h, i) => String(h).trim() || `Column ${i + 1}`);
+        finalHeaders = headerRow.map((h, i) => {
+            const val = String(h || '').trim();
+            return val || XLSX.utils.encode_col(i);
+        });
         startDataIdx = headerRowIdx + 1;
     } else {
         let maxCols = 0;
@@ -129,7 +139,7 @@ export function parseExcelData(
             if (row.length > maxCols) maxCols = row.length;
         });
         for (let i = 0; i < Math.max(1, maxCols); i++) {
-            finalHeaders.push(`Column ${i + 1}`);
+            finalHeaders.push(XLSX.utils.encode_col(i)); // Use A, B, C as default headers
         }
         startDataIdx = headerRowIdx === -1 ? 0 : headerRowIdx;
     }

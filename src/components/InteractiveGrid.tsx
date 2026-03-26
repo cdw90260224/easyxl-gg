@@ -110,24 +110,33 @@ export default function InteractiveGrid({ data, onSelectionChange, onDataChange,
         >
             <table className="border-collapse text-sm" style={{ minWidth: '100%' }}>
                 <thead>
-                    <tr>
+                    <tr className="border-b border-gray-200 dark:border-gray-800">
                         {/* Row number header corner */}
-                        <th className="sticky top-0 left-0 z-30 w-10 min-w-[40px] bg-gray-100 dark:bg-[#262626] border border-gray-300 dark:border-gray-700 text-center text-xs text-gray-400 font-medium" />
-                        {/* Column letter headers */}
-                        {headers.map((h, ci) => (
-                            <th
-                                key={ci}
-                                className={`sticky top-0 z-20 bg-gray-100 dark:bg-[#262626] border border-gray-300 dark:border-gray-700 px-3 py-1 text-left text-xs font-bold text-gray-500 dark:text-gray-400 whitespace-nowrap`}
-                                style={{ minWidth: '150px' }}
-                            >
-                                <div className="flex items-center gap-2">
-                                    <span className="text-[9px] opacity-50 font-mono">
-                                        {String.fromCharCode(65 + ci)}
-                                    </span>
-                                    <span>{h}</span>
-                                </div>
-                            </th>
-                        ))}
+                        <th className="sticky top-0 left-0 z-30 w-10 min-w-[40px] bg-gray-100 dark:bg-[#202020] border border-gray-300 dark:border-gray-700 text-center text-xs text-gray-400 font-mono">
+                            #
+                        </th>
+                        {/* Column headers */}
+                        {headers.map((h, ci) => {
+                            const colLetter = String.fromCharCode(65 + ci);
+                            const showColName = h !== colLetter && !h.startsWith('Column ');
+
+                            return (
+                                <th
+                                    key={ci}
+                                    className="sticky top-0 z-20 bg-gray-50/80 dark:bg-[#1a1a1a]/80 backdrop-blur-md border-r border-b border-gray-200 dark:border-gray-800 px-3 py-2 text-left min-w-[150px] relative group/header h-12"
+                                >
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-[10px] font-bold text-gray-400 dark:text-gray-500 font-mono flex-shrink-0">
+                                            {colLetter}:
+                                        </span>
+                                        <span className={`text-sm font-bold truncate block ${showColName ? 'text-gray-900 dark:text-gray-100' : 'text-gray-300 dark:text-gray-600 italic font-normal'}`}>
+                                            {showColName ? h : "Name"}
+                                        </span>
+                                    </div>
+                                    <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-indigo-500/0 group-hover/header:bg-indigo-500/30 cursor-col-resize transition-colors" />
+                                </th>
+                            );
+                        })}
                     </tr>
                 </thead>
                 <tbody>
