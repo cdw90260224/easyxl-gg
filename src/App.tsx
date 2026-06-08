@@ -7,6 +7,8 @@ import InteractiveGrid from './components/InteractiveGrid';
 import AnalyticsDashboard from './components/AnalyticsDashboard';
 import AIChartPanel from './components/AIChartPanel';
 import PrivacyModal from './components/PrivacyModal';
+import CreditModal from './components/CreditModal';
+import GuestCreditModal from './components/GuestCreditModal';
 import { Toaster, toast } from 'sonner';
 import * as XLSX from 'xlsx-js-style';
 import {
@@ -54,6 +56,8 @@ export default function App() {
     const [filteredData, setFilteredData] = useState<any[]>([]);
     const [isPrivacyMode, setIsPrivacyMode] = useState(true);
     const [isPrivacyModalOpen, setIsPrivacyModalOpen] = useState(false);
+    const [isCreditModalOpen, setIsCreditModalOpen] = useState(false);
+    const [isGuestModalOpen, setIsGuestModalOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
     const [analysis, setAnalysis] = useState<AIAnalysisResult | null>(null);
     const [isLoading, setIsLoading] = useState(false);
@@ -211,6 +215,17 @@ export default function App() {
             if (session?.user) {
                 setUser(session.user);
                 migrateGuestData(session.user.id);
+            }
+            
+            // Check for initial credit popup
+            const hasSeenCreditPopup = localStorage.getItem('hasSeenCreditPopup');
+            if (!hasSeenCreditPopup) {
+                if (session?.user) {
+                    setIsCreditModalOpen(true);
+                } else {
+                    setIsGuestModalOpen(true);
+                }
+                localStorage.setItem('hasSeenCreditPopup', 'true');
             }
         });
 
@@ -961,6 +976,8 @@ export default function App() {
             )}
             <Toaster position="bottom-right" richColors theme={isDark ? 'dark' : 'light'} />
             <PrivacyModal isOpen={isPrivacyModalOpen} onClose={() => setIsPrivacyModalOpen(false)} />
+            <CreditModal isOpen={isCreditModalOpen} onClose={() => setIsCreditModalOpen(false)} />
+            <GuestCreditModal isOpen={isGuestModalOpen} onClose={() => setIsGuestModalOpen(false)} />
 
             <Header
                 isDark={isDark}
