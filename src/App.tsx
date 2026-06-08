@@ -218,14 +218,14 @@ export default function App() {
             }
             
             // Check for initial credit popup
-            const hasSeenCreditPopup = localStorage.getItem('hasSeenCreditPopup');
+            const hasSeenCreditPopup = localStorage.getItem('hasSeenCreditPopup_v2');
             if (!hasSeenCreditPopup) {
                 if (session?.user) {
                     setIsCreditModalOpen(true);
                 } else {
                     setIsGuestModalOpen(true);
                 }
-                localStorage.setItem('hasSeenCreditPopup', 'true');
+                localStorage.setItem('hasSeenCreditPopup_v2', 'true');
             }
         });
 
